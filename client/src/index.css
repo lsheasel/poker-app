@@ -1,0 +1,76 @@
+/* Tailwind-Direktiven */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.card {
+  border: 1px solid #ccc;
+  padding: 10px;
+  margin: 5px;
+  display: inline-block;
+  width: 100px;
+  text-align: center;
+  border-radius: 8px; /* Abgerundete Ecken */
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Schatten */
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card:hover {
+  transform: translateY(-5px); /* Leichtes Anheben beim Hover */
+  box-shadow: 0 6px 10px rgba(0, 0, 0, 0.15);
+}
+
+.card-container {
+  margin: 10px;
+}
+
+.hands {
+  display: flex;
+  justify-content: space-around;
+}
+
+.player-hand,
+.dealer-hand {
+  margin-top: 20px;
+}
+
+.community-cards-area,
+.player-hand-area {
+  display: flex;
+  justify-content: center;
+  gap: 1rem; /* Abstand zwischen den Karten */
+}
+
+.actions .bet-container {
+  margin-right: 1rem; /* Abstand zwischen Bet und den anderen Buttons */
+}
+
+.actions button {
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: bold;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+}
+
+.actions button:hover {
+  transform: scale(1.05); /* Leichtes Vergrößern beim Hover */
+}
+
+.bet-container {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem; /* Abstand zwischen Input und Button */
+  background-color: #f9f9f9;
+  padding: 10px;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+input[type="number"] {
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
