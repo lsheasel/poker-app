@@ -265,6 +265,8 @@ const Lobby = ({ onStartGame }) => {
             className="text-xl text-gray-200 mb-4 text-center"
           >
             Play poker with friends – free & online!
+            This is a Beta! It can contain bugs and errors.
+            If you find any, please report them to our Discord Server.
           </motion.p>
         </div>
 
