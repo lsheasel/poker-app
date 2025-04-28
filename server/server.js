@@ -40,14 +40,16 @@ io.on("connection", (socket) => {
       communityCards: [],
       currentPlayer: 0,
       pot: 0,
-      currentPlayerIndex: 0, // Start bei Spieler 0
-      actionCount: 0,        // <--- NEU: Zählt Aktionen in der aktuellen Runde
-      currentBet: 0          // <--- aktueller Höchstbetrag in dieser Runde
+      currentPlayerIndex: 0,
+      actionCount: 0,
+      currentBet: 0,
+      gameState: "preflop", // Mögliche Zustände: preflop, flop, turn, river, finalBetting, showdown
+      showdownInProgress: false
     };
 
     socket.join(lobbyName);
     socket.emit("lobbyCreated", lobbyName);
-    io.to(lobbyName).emit("updatePlayers", lobbies[lobbyName].players); // <--- HINZUFÜGEN
+    io.to(lobbyName).emit("updatePlayers", lobbies[lobbyName].players);
   });
 
   socket.on("joinLobby", (lobbyName, playerName) => {
@@ -78,8 +80,9 @@ io.on("connection", (socket) => {
     
     lobby.deck = remainingDeck;
     lobby.gameStarted = true;
+    lobby.gameState = "preflop";
+    lobby.showdownInProgress = false;
 
-    // Send individual hands to each player with a delay
     lobby.players.forEach((player, index) => {
       setTimeout(() => {
         io.to(player.id).emit("dealCards", {
@@ -88,111 +91,84 @@ io.on("connection", (socket) => {
           isCurrentPlayer: index === 0,
           gameStarted: true
         });
-      }, 500); // 500ms delay
+      }, 500);
     });
 
-    // Broadcast game start with more information
     io.to(lobbyName).emit("gameStarted", {
       currentPlayer: lobby.players[0].id,
       players: lobby.players,
       pot: 0,
       gameStarted: true
     });
-    io.to(lobbyName).emit("updatePlayers", lobby.players); // <--- HINZUFÜGEN
+    io.to(lobbyName).emit("updatePlayers", lobby.players);
 
-    // Nach dem Austeilen der Karten, am Ende von "startGame":
     lobby.currentPlayerIndex = 0;
     const currentPlayerId = lobby.players[0].id;
     io.to(lobbyName).emit("currentPlayer", { playerId: currentPlayerId });
   });
 
-  // Einsatz setzen
   socket.on("bet", ({ lobbyName, amount }) => {
-    console.log(`[BET] Spieler ${socket.id} setzt ${amount} in Lobby ${lobbyName}`); // DEBUG
+    console.log(`[BET] Spieler ${socket.id} setzt ${amount} in Lobby ${lobbyName}, State: ${lobbies[lobbyName]?.gameState}`);
 
     const lobby = lobbies[lobbyName];
-    if (!lobby || !lobby.gameStarted) {
-      console.log(`[BET] Lobby ${lobbyName} nicht gefunden oder Spiel nicht gestartet!`); // DEBUG
+    if (!lobby || !lobby.gameStarted || lobby.showdownInProgress) {
+      console.log(`[BET] Lobby ${lobbyName} nicht gefunden, Spiel nicht gestartet, oder bereits im Showdown`);
       return;
     }
 
-    // Spieler finden und Chips abziehen
     const player = lobby.players.find(p => p.id === socket.id);
     if (!player) {
-      console.log(`[BET] Spieler ${socket.id} nicht in Lobby gefunden!`); // DEBUG
+      console.log(`[BET] Spieler ${socket.id} nicht in Lobby gefunden!`);
       return;
     }
 
-    console.log(`[BET] Vorher: Spieler-Chips: ${player.chips}, Pot: ${lobby.pot}`); // DEBUG
-
     if (player.chips < amount) {
-      console.log(`[BET] Spieler ${socket.id} hat nicht genug Chips! (${player.chips} < ${amount})`); // DEBUG
+      console.log(`[BET] Spieler ${socket.id} hat nicht genug Chips! (${player.chips} < ${amount})`);
       socket.emit("error", "Nicht genug Chips!");
       return;
     }
 
     player.chips -= amount;
     lobby.pot += amount;
-    lobby.currentBet = amount; // <--- HIER: aktueller Einsatz für diese Runde
+    lobby.currentBet = Math.max(amount, lobby.currentBet || 0);  // Sicherstellen, dass currentBet nicht null ist
 
-    console.log(`[BET] Nachher: Spieler-Chips: ${player.chips}, Pot: ${lobby.pot}`); // DEBUG
-
-    // An alle Spieler senden
     io.to(lobbyName).emit("updatePot", { pot: lobby.pot });
-    io.to(lobbyName).emit("updatePlayerChips", {
-      playerId: player.id,
-      chips: player.chips
-    });
+    io.to(lobbyName).emit("updatePlayerChips", { playerId: player.id, chips: player.chips });
     io.to(lobbyName).emit("updatePlayers", lobby.players);
 
-    // Nach Chips/Pot/Player-Logik, VOR Spielerwechsel:
     lobby.actionCount = (lobby.actionCount || 0) + 1;
 
     if (lobby.actionCount >= lobby.players.length) {
       lobby.actionCount = 0;
-
-      // Wenn alle 5 Community Cards liegen, ist die Runde vorbei!
-      if (lobby.communityCards.length === 5) {
-        // Showdown: Gewinner bestimmen (hier Dummy: erster Spieler)
-        const winner = lobby.players[0]; // TODO: Echte Poker-Logik einbauen!
-        winner.chips += lobby.pot;
-
-        // Allen Spielern neuen Chipstand schicken
-        lobby.players.forEach(player => {
-          io.to(lobbyName).emit("updatePlayerChips", {
-            playerId: player.id,
-            chips: player.chips
-          });
-        });
-
-        io.to(lobbyName).emit("roundEnded", { winnerId: winner.id, pot: lobby.pot });
-
-        // Kurze Pause, dann neue Runde starten
-        setTimeout(() => {
-          startNewRound(lobbyName);
-        }, 3000);
-        return; // NICHT mehr zum nächsten Spieler wechseln!
-      }
-
-      // Sonst wie gehabt: nächste Community Card aufdecken
-      revealNextCommunityCard(lobbyName);
+      
+      console.log(`[BET] Alle Spieler haben gesetzt, aktueller Zustand: ${lobby.gameState}`);
+      
+      // Übergang zum nächsten Spielzustand
+      advanceGameState(lobby, lobbyName);
     }
 
-    // Dann wie gehabt zum nächsten Spieler (nur wenn noch nicht beendet):
     lobby.currentPlayerIndex = (lobby.currentPlayerIndex + 1) % lobby.players.length;
     const currentPlayerId = lobby.players[lobby.currentPlayerIndex].id;
     io.to(lobbyName).emit("currentPlayer", { playerId: currentPlayerId });
   });
 
-  // Call
   socket.on("call", ({ lobbyName }) => {
+    console.log(`[CALL] Spieler ${socket.id} callt in Lobby ${lobbyName}, State: ${lobbies[lobbyName]?.gameState}`);
+    
     const lobby = lobbies[lobbyName];
-    if (!lobby || !lobby.gameStarted) return;
+    if (!lobby || !lobby.gameStarted || lobby.showdownInProgress) {
+      console.log(`[CALL] Lobby ${lobbyName} nicht gefunden, Spiel nicht gestartet, oder bereits im Showdown`);
+      return;
+    }
 
     const player = lobby.players.find(p => p.id === socket.id);
-    if (!player) return;
+    if (!player) {
+      console.log(`[CALL] Spieler ${socket.id} nicht in Lobby gefunden!`);
+      return;
+    }
 
-    const toCall = lobby.currentBet;
+    // Stellen Sie sicher, dass der zu callende Betrag mindestens 1 ist
+    const toCall = Math.max(1, lobby.currentBet || 0);
     if (player.chips < toCall) {
       socket.emit("error", "Nicht genug Chips zum Callen!");
       return;
@@ -202,95 +178,20 @@ io.on("connection", (socket) => {
     lobby.pot += toCall;
 
     io.to(lobbyName).emit("updatePot", { pot: lobby.pot });
-    io.to(lobbyName).emit("updatePlayerChips", {
-      playerId: player.id,
-      chips: player.chips
-    });
+    io.to(lobbyName).emit("updatePlayerChips", { playerId: player.id, chips: player.chips });
     io.to(lobbyName).emit("updatePlayers", lobby.players);
 
-    // Setzrunden-Logik wie gehabt:
     lobby.actionCount = (lobby.actionCount || 0) + 1;
+    
     if (lobby.actionCount >= lobby.players.length) {
       lobby.actionCount = 0;
-
-      // Wenn alle 5 Community Cards liegen, ist die Runde vorbei!
-      if (lobby.communityCards.length === 5) {
-        // Showdown: Gewinner bestimmen (hier Dummy: erster Spieler)
-        const winner = lobby.players[0]; // TODO: Echte Poker-Logik einbauen!
-        winner.chips += lobby.pot;
-
-        // Allen Spielern neuen Chipstand schicken
-        lobby.players.forEach(player => {
-          io.to(lobbyName).emit("updatePlayerChips", {
-            playerId: player.id,
-            chips: player.chips
-          });
-        });
-
-        io.to(lobbyName).emit("roundEnded", { winnerId: winner.id, pot: lobby.pot });
-
-        // Kurze Pause, dann neue Runde starten
-        setTimeout(() => {
-          startNewRound(lobbyName);
-        }, 3000);
-        return; // NICHT mehr zum nächsten Spieler wechseln!
-      }
-
-      // Sonst wie gehabt: nächste Community Card aufdecken
-      revealNextCommunityCard(lobbyName);
+      
+      console.log(`[CALL] Alle Spieler haben gecallt, aktueller Zustand: ${lobby.gameState}`);
+      
+      // Übergang zum nächsten Spielzustand
+      advanceGameState(lobby, lobbyName);
     }
 
-    // Dann wie gehabt zum nächsten Spieler (nur wenn noch nicht beendet):
-    lobby.currentPlayerIndex = (lobby.currentPlayerIndex + 1) % lobby.players.length;
-    const currentPlayerId = lobby.players[lobby.currentPlayerIndex].id;
-    io.to(lobbyName).emit("currentPlayer", { playerId: currentPlayerId });
-  });
-
-  // Fold
-  socket.on("fold", ({ lobbyName }) => {
-    const lobby = lobbies[lobbyName];
-    if (!lobby || !lobby.gameStarted) return;
-
-    // Beispiel: Spieler aus Runde nehmen
-    // lobby.players = lobby.players.filter(p => p.id !== socket.id);
-    io.to(lobbyName).emit("playerFolded", { playerId: socket.id });
-
-    // Hier weitere Logik (z.B. Runde beenden, Gewinner bestimmen)
-
-    // Nach Chips/Pot/Player-Logik, VOR Spielerwechsel:
-    lobby.actionCount = (lobby.actionCount || 0) + 1;
-
-    if (lobby.actionCount >= lobby.players.length) {
-      lobby.actionCount = 0;
-
-      // Wenn alle 5 Community Cards liegen, ist die Runde vorbei!
-      if (lobby.communityCards.length === 5) {
-        // Showdown: Gewinner bestimmen (hier Dummy: erster Spieler)
-        const winner = lobby.players[0]; // TODO: Echte Poker-Logik einbauen!
-        winner.chips += lobby.pot;
-
-        // Allen Spielern neuen Chipstand schicken
-        lobby.players.forEach(player => {
-          io.to(lobbyName).emit("updatePlayerChips", {
-            playerId: player.id,
-            chips: player.chips
-          });
-        });
-
-        io.to(lobbyName).emit("roundEnded", { winnerId: winner.id, pot: lobby.pot });
-
-        // Kurze Pause, dann neue Runde starten
-        setTimeout(() => {
-          startNewRound(lobbyName);
-        }, 3000);
-        return; // NICHT mehr zum nächsten Spieler wechseln!
-      }
-
-      // Sonst wie gehabt: nächste Community Card aufdecken
-      revealNextCommunityCard(lobbyName);
-    }
-
-    // Dann wie gehabt zum nächsten Spieler (nur wenn noch nicht beendet):
     lobby.currentPlayerIndex = (lobby.currentPlayerIndex + 1) % lobby.players.length;
     const currentPlayerId = lobby.players[lobby.currentPlayerIndex].id;
     io.to(lobbyName).emit("currentPlayer", { playerId: currentPlayerId });
@@ -306,18 +207,80 @@ io.on("connection", (socket) => {
           delete lobbies[currentLobby];
         } else {
           io.to(currentLobby).emit("playerLeft", lobby.players);
-          io.to(currentLobby).emit("updatePlayers", lobby.players); // <--- HINZUFÜGEN
+          io.to(currentLobby).emit("updatePlayers", lobby.players);
         }
       }
     }
   });
 });
 
-server.listen(3002, () => {  // Port von 3001 zu 3002 geändert
+// Neue Funktion zum Fortschreiten des Spielzustands
+function advanceGameState(lobby, lobbyName) {
+  console.log(`[ADVANCE] Fortschreiten vom Zustand ${lobby.gameState}`);
+  
+  switch (lobby.gameState) {
+    case "preflop":
+      // Nach dem Preflop kommt der Flop (erste 3 Gemeinschaftskarten)
+      dealCommunityCards(lobby, lobbyName, 3);
+      lobby.gameState = "flop";
+      lobby.currentBet = 1;  // Mindestbetrag für den nächsten Call
+      break;
+      
+    case "flop":
+      // Nach dem Flop kommt der Turn (4. Gemeinschaftskarte)
+      dealCommunityCards(lobby, lobbyName, 1);
+      lobby.gameState = "turn";
+      lobby.currentBet = 1;  // Mindestbetrag für den nächsten Call
+      break;
+      
+    case "turn":
+      // Nach dem Turn kommt der River (5. Gemeinschaftskarte)
+      dealCommunityCards(lobby, lobbyName, 1);
+      lobby.gameState = "river";
+      lobby.currentBet = 1;  // Mindestbetrag für den nächsten Call
+      break;
+      
+    case "river":
+      // Nach dem River kommt die letzte Wettrunde
+      lobby.gameState = "finalBetting";
+      lobby.currentBet = 1;  // Mindestbetrag für den nächsten Call
+      io.to(lobbyName).emit("bettingRound", { message: "Letzte Wettrunde vor dem Showdown!" });
+      break;
+      
+    case "finalBetting":
+      // Nach der letzten Wettrunde kommt der Showdown
+      lobby.gameState = "showdown";
+      lobby.showdownInProgress = true;
+      
+      console.log(`[SHOWDOWN] Spiel beendet, Gewinner wird ermittelt`);
+      const winner = determineWinner(lobby);
+      winner.chips += lobby.pot;
+      
+      io.to(lobbyName).emit("updatePlayerChips", { playerId: winner.id, chips: winner.chips });
+      io.to(lobbyName).emit("roundEnded", { winnerId: winner.id, pot: lobby.pot });
+      
+      setTimeout(() => {
+        startNewRound(lobbyName);
+      }, 3000);
+      break;
+  }
+}
+
+function dealCommunityCards(lobby, lobbyName, count) {
+  if (!lobby || !lobby.deck) return;
+  
+  const newCards = lobby.deck.splice(0, count);
+  if (!lobby.communityCards) lobby.communityCards = [];
+  lobby.communityCards.push(...newCards);
+  
+  console.log(`[DEAL] ${count} Gemeinschaftskarten ausgeteilt, jetzt insgesamt ${lobby.communityCards.length}`);
+  io.to(lobbyName).emit("communityCards", { cards: lobby.communityCards });
+}
+
+server.listen(3002, () => {
   console.log("Server running on port 3002");
 });
 
-// Helper functions remain the same
 const generateDeck = () => {
   const suits = ["hearts", "diamonds", "clubs", "spades"];
   const values = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
@@ -329,7 +292,6 @@ const generateDeck = () => {
     }
   }
 
-  // Shuffle the deck
   for (let i = deck.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [deck[i], deck[j]] = [deck[j], deck[i]];
@@ -346,75 +308,20 @@ const dealCards = (deck, numPlayers) => {
   return { hands, remainingDeck: deck };
 };
 
-const dealCommunityCards = (deck, stage) => {
-  let cards = [];
-  switch (stage) {
-    case 'flop':
-      cards = deck.splice(0, 3);
-      break;
-    case 'turn':
-    case 'river':
-      cards = deck.splice(0, 1);
-      break;
-  }
-  return { cards, remainingDeck: deck };
-};
-
-// Beispiel: Nach einer Runde (alle Spieler haben gesetzt/called)
-const revealNextCommunityCard = (lobbyName) => {
-  const lobby = lobbies[lobbyName];
-  if (!lobby) return;
-
-  let stage = lobby.communityCards.length;
-  let cardsToDeal = 0;
-  if (stage === 0) cardsToDeal = 3; // Flop
-  else if (stage === 3) cardsToDeal = 1; // Turn
-  else if (stage === 4) cardsToDeal = 1; // River
-
-  if (cardsToDeal > 0) {
-    const newCards = lobby.deck.splice(0, cardsToDeal);
-    lobby.communityCards.push(...newCards);
-    io.to(lobbyName).emit("communityCards", { cards: lobby.communityCards });
-  }
-
-  lobby.currentBet = 0;
-
-  // --- NEU: Nach dem River Gewinner bestimmen und neue Runde starten ---
-  if (lobby.communityCards.length === 5) {
-    // Dummy-Gewinner: Spieler mit den meisten Chips (ersetze das durch echte Poker-Logik!)
-    // Hier solltest du eine echte Pokerhand-Auswertung machen!
-    const winner = lobby.players.reduce((a, b) => a.chips > b.chips ? a : b);
-
-    // Pot auszahlen
-    winner.chips += lobby.pot;
-
-    // Allen Spielern neuen Chipstand schicken
-    lobby.players.forEach(player => {
-      io.to(lobbyName).emit("updatePlayerChips", {
-        playerId: player.id,
-        chips: player.chips
-      });
-    });
-
-    io.to(lobbyName).emit("roundEnded", { winnerId: winner.id, pot: lobby.pot });
-
-    // Kurze Pause, dann neue Runde starten
-    setTimeout(() => {
-      startNewRound(lobbyName);
-    }, 3000);
-  }
-};
-
 function startNewRound(lobbyName) {
   const lobby = lobbies[lobbyName];
   if (!lobby) return;
 
+  console.log(`[NEW ROUND] Starte neue Runde in Lobby ${lobbyName}`);
+
   lobby.deck = generateDeck();
   lobby.communityCards = [];
   lobby.pot = 0;
-  lobby.currentBet = 0;
+  lobby.currentBet = 1;  // Setze den Mindestbetrag für den ersten Call
   lobby.actionCount = 0;
   lobby.gameStarted = true;
+  lobby.gameState = "preflop";
+  lobby.showdownInProgress = false;
 
   const { hands, remainingDeck } = dealCards(lobby.deck, lobby.players.length);
   lobby.deck = remainingDeck;
@@ -435,3 +342,8 @@ function startNewRound(lobbyName) {
   const currentPlayerId = lobby.players[0].id;
   io.to(lobbyName).emit("currentPlayer", { playerId: currentPlayerId });
 }
+
+const determineWinner = (lobby) => {
+  // Beispiel für die Bestimmung des Gewinners: Hier verwenden wir den Spieler mit den meisten Chips als Platzhalter
+  return lobby.players.reduce((a, b) => a.chips > b.chips ? a : b);
+};
