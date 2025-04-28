@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './PokerGame.css';
-import socket from '../socket'; // falls noch nicht importiert
-import { stopLobbyMusic } from "./Lobby"; // Importiere die Funktion
+import socket from '../socket';
+import { stopLobbyMusic } from "./Lobby";
 import { motion, AnimatePresence } from "framer-motion";
 
-// ganz oben in PokerGame.jsx
+// Audio management
 let tableAudio = null;
 
 function playTableMusic() {
@@ -15,7 +15,7 @@ function playTableMusic() {
   tableAudio = new window.Audio("/table.mp3");
   tableAudio.volume = 0.1;
   tableAudio.loop = true;
-  tableAudio.play();
+  tableAudio.play().catch(e => console.log("Audio playback prevented:", e));
 }
 
 function stopTableMusic() {
@@ -26,7 +26,7 @@ function stopTableMusic() {
   }
 }
 
-// Hilfsfunktionen für Farben und Symbole
+// Card utilities
 const getSuitColor = (suit) =>
   suit === 'hearts' || suit === 'diamonds' ? 'text-red-600' : 'text-black';
 
@@ -40,34 +40,22 @@ const getSuitSymbol = (suit) => {
   }
 };
 
-// Karten-Komponente mit Animation
-const Card = ({ card, index, shouldAnimate, cardType }) => {
-  const [animated, setAnimated] = useState(false);
-
-  useEffect(() => {
-    if (shouldAnimate) {
-      const timer = setTimeout(() => setAnimated(true), 200);
-      return () => clearTimeout(timer);
-    }
-  }, [shouldAnimate]);
-
-  // Position für Animation (optional, kann angepasst werden)
-  const getPosition = () => {
-    if (cardType === 'playerHand') {
-      return { bottom: '10%', left: `${40 + index * 8}%` };
-    } else {
-      return { top: '30%', left: `${35 + index * 6}%` };
-    }
-  };
-
-  const position = getPosition();
-
+// Enhanced Card component with Framer Motion
+const Card = ({ card, index, delay = 0, type = 'community' }) => {
+  const initialY = type === 'player' ? 100 : -100;
+  
   return (
-    <div
-      className={`poker-card ${shouldAnimate && !animated ? 'card-dealing' : ''} ${
-        animated ? 'card-in-hand' : ''
-      }`}
-      style={position}
+    <motion.div 
+      initial={{ y: initialY, opacity: 0, rotateY: 180 }}
+      animate={{ y: 0, opacity: 1, rotateY: 0 }}
+      transition={{ 
+        delay: delay * 0.15,
+        duration: 0.5,
+        type: "spring",
+        stiffness: 120,
+        damping: 15
+      }}
+      className="relative bg-white rounded-lg border-2 border-gray-300 shadow-lg w-14 h-20 flex items-center justify-center overflow-hidden"
     >
       <div className="card-inner">
         <div className="card-value-top">
@@ -82,13 +70,76 @@ const Card = ({ card, index, shouldAnimate, cardType }) => {
           <span className={getSuitColor(card.suit)}>{getSuitSymbol(card.suit)}</span>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 };
 
-// PokerGame-Komponente für Multiplayer
+// Chip component
+const Chip = ({ amount, delay = 0 }) => {
+  return (
+    <motion.div 
+      initial={{ y: -20, opacity: 0, scale: 0.8 }}
+      animate={{ y: 0, opacity: 1, scale: 1 }}
+      transition={{ 
+        delay: delay * 0.1,
+        duration: 0.4,
+        type: "spring",
+        stiffness: 200,
+        damping: 15
+      }}
+      className="chip-stack relative"
+    >
+      <div className="absolute -top-1 -left-1 w-14 h-14 bg-yellow-600 rounded-full shadow-inner z-10 flex items-center justify-center">
+        <div className="w-12 h-12 bg-yellow-500 rounded-full border-4 border-yellow-300 flex items-center justify-center text-xs font-bold text-white">
+          ${amount}
+        </div>
+      </div>
+    </motion.div>
+  );
+};
+
+// Player Avatar component
+const PlayerAvatar = ({ player, isCurrentPlayer, position, delay }) => {
+  return (
+    <motion.div
+      initial={{ scale: 0.7, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      transition={{ 
+        delay: delay, 
+        duration: 0.5, 
+        type: "spring",
+        stiffness: 120,
+        damping: 10
+      }}
+      className="absolute flex flex-col items-center z-20"
+      style={position}
+    >
+      <motion.div 
+        animate={isCurrentPlayer ? { 
+          boxShadow: ['0 0 0px rgba(255,215,0,0)', '0 0 15px rgba(255,215,0,0.7)', '0 0 0px rgba(255,215,0,0)'] 
+        } : {}}
+        transition={{
+          duration: 1.5,
+          repeat: isCurrentPlayer ? Infinity : 0,
+          repeatType: "loop"
+        }}
+        className={`
+          rounded-full bg-gray-800 border-4 
+          ${isCurrentPlayer ? "border-yellow-400" : "border-gray-600"} 
+          w-24 h-16 flex items-center justify-center text-white text-base font-bold 
+          transition-all duration-300
+        `}
+      >
+        {player.name || "?"}
+      </motion.div>
+      <div className="mt-1 text-white text-sm font-bold">${player.chips ?? 0}</div>
+    </motion.div>
+  );
+};
+
+// Main PokerGame Component
 const PokerGame = ({
-  players = [], // <-- nur dieses verwenden!
+  players = [],
   playerHand = [],
   communityCards = [],
   pot = 0,
@@ -105,51 +156,59 @@ const PokerGame = ({
   opponentChips
 }) => {
   const [betInput, setBetInput] = useState('');
-  const [newCardIndices, setNewCardIndices] = useState([]);
   const [isDealing, setIsDealing] = useState(false);
-  const [disableAnimation, setDisableAnimation] = useState(false);
-
+  const [confetti, setConfetti] = useState(false);
+  const tableRef = useRef(null);
+  
   const isMyTurn = currentPlayerId === myPlayerId;
 
-  console.log("currentPlayerId:", currentPlayerId, "myPlayerId:", myPlayerId);
+  // Winning popup state
+  const [winnerPopup, setWinnerPopup] = useState({ 
+    show: false, 
+    name: '', 
+    amount: 0 
+  });
 
-  // Gewinner-Popup State
-  const [winnerPopup, setWinnerPopup] = useState({ show: false, name: '', amount: 0 });
-
+  // Handle round end and winner animation
   useEffect(() => {
     const handleRoundEnded = ({ winnerId, pot }) => {
       const winner = players.find(p => p.id === winnerId);
       setWinnerPopup({
         show: true,
-        name: winner ? winner.name : "Unbekannt",
+        name: winner ? winner.name : "Unknown",
         amount: pot
       });
-      setTimeout(() => setWinnerPopup({ show: false, name: '', amount: 0 }), 1000);
+      setConfetti(true);
+      
+      // Reset animations
+      setTimeout(() => {
+        setWinnerPopup({ show: false, name: '', amount: 0 });
+        setConfetti(false);
+      }, 3000);
     };
+    
     socket.on("roundEnded", handleRoundEnded);
     return () => socket.off("roundEnded", handleRoundEnded);
   }, [players]);
 
-  // Animation für neue Karten (optional, kann angepasst werden)
+  // Dealing animation
   useEffect(() => {
     if (playerHand.length > 0) {
       setIsDealing(true);
-      setNewCardIndices([0, 1]);
       setTimeout(() => {
         setIsDealing(false);
-        setNewCardIndices([]);
       }, 1500);
     }
   }, [playerHand]);
 
-  // Musik für den Tisch
+  // Table music
   useEffect(() => {
-    stopLobbyMusic();      // Stoppt die Lobby-Musik sofort beim Betreten des Tisches
-    playTableMusic();      // Startet die Tischmusik
+    stopLobbyMusic();
+    playTableMusic();
     return () => stopTableMusic();
   }, []);
 
-  // Handbewertung (wie im Beispiel)
+  // Hand evaluation
   const evaluateHand = (playerHand, communityCards) => {
     const allCards = [...playerHand, ...communityCards];
     const values = allCards.map((card) => card.value);
@@ -187,7 +246,7 @@ const PokerGame = ({
     return "High Card";
   };
 
-  // Positionen für bis zu 10 Spieler
+  // Player positions with proper distribution around the table
   const playerPositions = [
     { left: "15%", top: "20%" },
     { right: "15%", top: "20%" },
@@ -201,86 +260,119 @@ const PokerGame = ({
     { right: "10%", bottom: "10%" }
   ];
 
+  // Confetti effect
+  const renderConfetti = () => {
+    if (!confetti) return null;
+    
+    return Array.from({ length: 100 }).map((_, i) => {
+      const style = {
+        left: `${Math.random() * 100}%`,
+        top: `${Math.random() * 100}%`,
+        animationDelay: `${Math.random() * 2}s`,
+        backgroundColor: `hsl(${Math.random() * 360}, 70%, 50%)`,
+      };
+      
+      return <div key={i} className="confetti" style={style}></div>;
+    });
+  };
+
   return (
-    <div className="min-h-screen w-full flex flex-col items-center justify-center bg-gradient-to-br from-[#2d112b] via-[#1a1a2e] to-[#3a1c71]">
-      {/* Tisch */}
+    <div className="min-h-screen w-full flex flex-col items-center justify-center bg-gradient-to-br from-[#2d112b] via-[#1a1a2e] to-[#3a1c71] overflow-hidden">
+      {/* Confetti effect */}
+      {confetti && <div className="confetti-container">{renderConfetti()}</div>}
+
+      {/* Table */}
       <motion.div
+        ref={tableRef}
         initial={{ scale: 0.8, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ duration: 0.7, type: "spring" }}
-        className="relative w-[600px] h-[600px] mx-auto my-2 bg-green-800 rounded-full border-8 border-yellow-400 shadow-lg flex items-center justify-center"
+        className="relative w-[650px] h-[650px] mx-auto my-2 rounded-full border-8 border-[#8B4513] shadow-2xl flex items-center justify-center"
+        style={{
+          background: "linear-gradient(135deg, rgba(0,120,60,1) 0%, rgba(0,80,40,1) 50%, rgba(0,60,30,1) 100%)",
+        }}
       >
-        {/* Pot */}
-        <div className="absolute left-1/2 top-[32%] transform -translate-x-1/2 text-center z-10">
-          <div className="bg-green-900 text-white px-4 py-2 rounded-full shadow">
-            POT: ${pot}
-          </div>
+        {/* Table inner shadow */}
+        <div className="absolute inset-0 rounded-full bg-gradient-to-br from-transparent via-transparent to-black opacity-30"></div>
+        
+        {/* Table logo */}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
+          <div className="text-white text-5xl font-bold">POKER</div>
         </div>
+
+        {/* Pot with chip animation */}
+        <motion.div 
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 0.5, type: "spring" }}
+          className="absolute left-1/2 top-[30%] transform -translate-x-1/2 text-center z-10"
+        >
+          <div className="bg-green-900 text-white px-6 py-3 rounded-full shadow-lg border border-yellow-500">
+            <span className="mr-2">POT:</span>
+            <span className="text-yellow-300 font-bold text-xl">${pot}</span>
+          </div>
+          {pot > 0 && (
+            <div className="chips-container flex justify-center mt-2">
+              {[...Array(Math.min(5, Math.ceil(pot / 100)))].map((_, i) => (
+                <Chip key={i} amount={Math.min(100, pot / (i + 1))} delay={i} />
+              ))}
+            </div>
+          )}
+        </motion.div>
 
         {/* Community Cards */}
-        <div className="absolute left-1/2 top-[45%] transform -translate-x-1/2 flex space-x-2 z-10">
+        <div className="absolute left-1/2 top-[45%] transform -translate-x-1/2 flex space-x-3 z-10">
           {communityCards.map((card, i) => (
-            <motion.div
-              key={i}
-              initial={{ y: -40, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: i * 0.15, duration: 0.4, type: "spring" }}
-              className="bg-white rounded-lg border w-12 h-16 flex items-center justify-center text-2xl shadow"
-            >
-              {card.value}
-              <span className={card.suit === "hearts" || card.suit === "diamonds" ? "text-red-600" : "text-black"}>
-                {getSuitSymbol(card.suit)}
-              </span>
-            </motion.div>
+            <Card 
+              key={i} 
+              card={card} 
+              index={i} 
+              delay={i} 
+              type="community" 
+            />
           ))}
         </div>
 
-        {/* Eigene Hand */}
+        {/* Player Hand */}
         <div className="absolute left-1/2 bottom-20 transform -translate-x-1/2 flex space-x-4 z-20">
           {playerHand.map((card, i) => (
-            <motion.div
-              key={i}
-              initial={{ y: 40, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: i * 0.2, duration: 0.4, type: "spring" }}
-              className="bg-white rounded-lg border w-14 h-20 flex items-center justify-center text-2xl shadow"
-            >
-              {card.value}
-              <span className={card.suit === "hearts" || card.suit === "diamonds" ? "text-red-600" : "text-black"}>
-                {getSuitSymbol(card.suit)}
-              </span>
-            </motion.div>
+            <Card 
+              key={i} 
+              card={card} 
+              index={i} 
+              delay={i} 
+              type="player" 
+            />
           ))}
         </div>
 
-        {/* Handbewertung anzeigen */}
+        {/* Hand evaluation display */}
         {playerHand.length === 2 && communityCards.length > 0 && (
-          <div className="absolute left-1/2 bottom-8 transform -translate-x-1/2 z-30">
-            <div className="bg-gray-900 text-yellow-300 px-4 py-2 rounded-full shadow text-lg font-bold border border-yellow-400">
+          <motion.div 
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.5, duration: 0.4 }}
+            className="absolute left-1/2 bottom-8 transform -translate-x-1/2 z-30"
+          >
+            <div className="bg-gray-900 text-yellow-300 px-6 py-3 rounded-full shadow-lg text-lg font-bold border-2 border-yellow-400">
               {evaluateHand(playerHand, communityCards)}
             </div>
-          </div>
+          </motion.div>
         )}
 
-        {/* Spieler-Avatare */}
+        {/* Player Avatars */}
         {players.map((player, idx) => (
-          <motion.div
+          <PlayerAvatar
             key={player.id || idx}
-            initial={{ scale: 0.7, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ delay: 0.2 + idx * 0.1, duration: 0.5, type: "spring" }}
-            className="absolute flex flex-col items-center z-20"
-            style={playerPositions[idx] || { left: "50%", top: "50%" }}
-          >
-            <div className={`rounded-full bg-gray-800 border-4 ${currentPlayerId === player.id ? "border-yellow-400" : "border-gray-600"} w-24 h-16 flex items-center justify-center text-white text-base font-bold transition-all duration-300`}>
-              {player.name || "?"}
-            </div>
-            <div className="mt-1 text-white text-sm font-bold">${player.chips ?? 0}</div>
-          </motion.div>
+            player={player}
+            isCurrentPlayer={currentPlayerId === player.id}
+            position={playerPositions[idx] || { left: "50%", top: "50%" }}
+            delay={0.2 + idx * 0.1}
+          />
         ))}
       </motion.div>
 
-      {/* Gewinner-Popup */}
+      {/* Winner Popup */}
       <AnimatePresence>
         {winnerPopup.show && (
           <motion.div
@@ -288,65 +380,157 @@ const PokerGame = ({
             animate={{ scale: 1.1, opacity: 1, y: 0 }}
             exit={{ scale: 0.7, opacity: 0, y: 60 }}
             transition={{ type: "spring", stiffness: 300, damping: 20 }}
-            className="fixed inset-0 flex items-center justify-center z-50"
+            className="fixed inset-0 flex items-center justify-center z-50 bg-black bg-opacity-50"
           >
             <motion.div
               initial={{ rotate: -10 }}
-              animate={{ rotate: 0 }}
-              exit={{ rotate: 10 }}
+              animate={{ 
+                rotate: [0, 5, -5, 3, -3, 0],
+                scale: [1, 1.05, 1, 1.05, 1]
+              }}
+              transition={{ 
+                duration: 1.5,
+                times: [0, 0.2, 0.4, 0.6, 0.8, 1],
+                repeat: Infinity
+              }}
               className="bg-gradient-to-br from-yellow-400 to-pink-500 rounded-2xl shadow-2xl px-12 py-8 flex flex-col items-center border-4 border-white"
             >
-              <div className="text-3xl font-extrabold text-white mb-2 drop-shadow-lg animate-bounce">
-                🏆 Gewinner!
+              <div className="text-4xl font-extrabold text-white mb-3 drop-shadow-lg">
+                🏆 Winner!
               </div>
-              <div className="text-2xl font-bold text-white mb-1">{winnerPopup.name}</div>
-              <div className="text-lg text-white mb-2">gewinnt den Pot von</div>
-              <div className="text-3xl font-extrabold text-yellow-200 mb-2">${winnerPopup.amount}</div>
-              <div className="text-2xl">🎉</div>
+              <div className="text-3xl font-bold text-white mb-2">{winnerPopup.name}</div>
+              <div className="text-xl text-white mb-3">wins the pot of</div>
+              <div className="text-4xl font-extrabold text-yellow-200 mb-3 tracking-wider">
+                ${winnerPopup.amount}
+              </div>
+              <div className="text-3xl">🎉</div>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Action Buttons UNTER dem Tisch */}
+      {/* Action Buttons */}
       {gameStarted && (
-        <div className="w-[600px] mx-auto flex flex-col items-center mt-0 z-30">
-          <div className="text-white text-lg font-bold mb-2">
-            {isMyTurn ? "Du bist dran!" : "Warte auf den Zug des Gegners..."}
+        <motion.div 
+          initial={{ y: 50, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.3, duration: 0.5 }}
+          className="w-[600px] mx-auto flex flex-col items-center mt-4 z-30"
+        >
+          <div className={`
+            text-white text-xl font-bold mb-3 px-6 py-2 rounded-full
+            ${isMyTurn ? 'bg-green-600' : 'bg-gray-700'}
+            transition-all duration-300
+          `}>
+            {isMyTurn ? "Your Turn!" : "Waiting for opponent..."}
           </div>
-          <div className="flex space-x-2 mb-2">
+          
+          <div className="flex space-x-4 mb-2">
             <input
               type="number"
               value={betInput}
               onChange={(e) => setBetInput(e.target.value)}
-              className="p-2 rounded-lg text-black w-24"
-              placeholder="Betrag"
+              className="p-3 rounded-lg text-black w-32 border-2 border-gray-300 focus:border-blue-500 focus:outline-none transition-all"
+              placeholder="Amount"
               disabled={!isMyTurn}
             />
-            <button
+            
+            <motion.button
+              whileHover={{ scale: isMyTurn ? 1.05 : 1 }}
+              whileTap={{ scale: isMyTurn ? 0.95 : 1 }}
               onClick={() => onBet && onBet(Number(betInput))}
               disabled={!isMyTurn}
-              className={`bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded transition-all ${!isMyTurn ? 'opacity-50 cursor-not-allowed' : ''}`}
+              className={`
+                bg-gradient-to-r from-blue-500 to-blue-600 text-white font-bold 
+                py-3 px-6 rounded-lg shadow-lg transition-all
+                ${!isMyTurn ? 'opacity-50 cursor-not-allowed' : 'hover:from-blue-600 hover:to-blue-700'}
+              `}
             >
-              Setzen
-            </button>
-            <button
+              Bet
+            </motion.button>
+            
+            <motion.button
+              whileHover={{ scale: isMyTurn ? 1.05 : 1 }}
+              whileTap={{ scale: isMyTurn ? 0.95 : 1 }}
               onClick={onCall}
               disabled={!isMyTurn}
-              className={`bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded transition-all ${!isMyTurn ? 'opacity-50 cursor-not-allowed' : ''}`}
+              className={`
+                bg-gradient-to-r from-green-500 to-green-600 text-white font-bold 
+                py-3 px-6 rounded-lg shadow-lg transition-all
+                ${!isMyTurn ? 'opacity-50 cursor-not-allowed' : 'hover:from-green-600 hover:to-green-700'}
+              `}
             >
               Call
-            </button>
-            <button
+            </motion.button>
+            
+            <motion.button
+              whileHover={{ scale: isMyTurn ? 1.05 : 1 }}
+              whileTap={{ scale: isMyTurn ? 0.95 : 1 }}
               onClick={onFold}
               disabled={!isMyTurn}
-              className={`bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded transition-all ${!isMyTurn ? 'opacity-50 cursor-not-allowed' : ''}`}
+              className={`
+                bg-gradient-to-r from-red-500 to-red-600 text-white font-bold 
+                py-3 px-6 rounded-lg shadow-lg transition-all
+                ${!isMyTurn ? 'opacity-50 cursor-not-allowed' : 'hover:from-red-600 hover:to-red-700'}
+              `}
             >
               Fold
-            </button>
+            </motion.button>
           </div>
-        </div>
+        </motion.div>
       )}
+      
+      {/* CSS for animations */}
+      <style jsx>{`
+        @keyframes fall {
+          0% { transform: translateY(-100vh) rotate(0deg); }
+          100% { transform: translateY(100vh) rotate(360deg); }
+        }
+        
+        .confetti {
+          position: absolute;
+          width: 10px;
+          height: 10px;
+          animation: fall 4s ease-out forwards;
+        }
+        
+        .card-inner {
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
+          height: 100%;
+          width: 100%;
+          padding: 0.25rem;
+        }
+        
+        .card-value-top {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          font-weight: bold;
+        }
+        
+        .card-suit {
+          font-size: 1.5rem;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          flex-grow: 1;
+        }
+        
+        .card-value-bottom {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-end;
+          transform: rotate(180deg);
+          font-weight: bold;
+        }
+        
+        .chip-stack {
+          transform: rotate(45deg);
+          margin: -8px 4px;
+        }
+      `}</style>
     </div>
   );
 };
