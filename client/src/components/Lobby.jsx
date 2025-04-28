@@ -213,7 +213,7 @@ const Lobby = ({ onStartGame }) => {
               <a href="#" className="text-white hover:text-blue-300 transition">About</a>
               <div className="flex gap-3">
                 <a
-                  href="https://discord.gg/TrZbefVdnn"
+                  href="https://discord.gg/tCCdfJyZEp"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="bg-indigo-600 hover:bg-indigo-700 text-white p-2 rounded-full shadow-lg transition-all hover:scale-110"
