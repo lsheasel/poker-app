@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import socket from "../socket";
 import { motion } from "framer-motion";
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faDiscord } from '@fortawesome/free-brands-svg-icons';
 
 let lobbyAudio = null;
 
@@ -32,13 +34,6 @@ function generateLobbyCode(length = 6) {
   return code;
 }
 
-function playSound() {
-  const audio = new window.Audio("/game.mp3");
-  audio.volume = 0.1;
-  audio.loop = true;
-  audio.play();
-}
-
 const Lobby = ({ onStartGame }) => {
   const [lobbyName, setLobbyName] = useState("");
   const [playerName, setPlayerName] = useState("");
@@ -53,40 +48,46 @@ const Lobby = ({ onStartGame }) => {
   }, []);
 
   useEffect(() => {
-    socket.on("playerJoined", (players) => {
+    const handlePlayerJoined = (players) => {
       setLobbyPlayers(players);
       setInLobby(true);
-    });
+    };
 
-    socket.on("gameStarted", () => {
+    const handleGameStarted = () => {
       stopLobbyMusic();
       onStartGame({
         lobbyName,
         playerName,
         playerId: socket.id,
-        isHost
+        isHost,
       });
-    });
+    };
 
-    socket.on("error", (message) => setPopup({ open: true, message }));
+    const handleError = (message) => {
+      setPopup({ open: true, message });
+    };
+
+    socket.on("playerJoined", handlePlayerJoined);
+    socket.on("gameStarted", handleGameStarted);
+    socket.on("error", handleError);
 
     return () => {
-      socket.off("playerJoined");
-      socket.off("gameStarted");
-      socket.off("error");
+      socket.off("playerJoined", handlePlayerJoined);
+      socket.off("gameStarted", handleGameStarted);
+      socket.off("error", handleError);
     };
-  }, [lobbyName, onStartGame]);
+  }, [lobbyName, onStartGame, isHost, playerName]);
 
   const createLobby = () => {
     if (!playerName) {
-      setPopup({ open: true, message: "Bitte gib deinen Namen ein!" });
+      setPopup({ open: true, message: "Please enter your name!" });
       return;
     }
-    playSound();
     const code = generateLobbyCode();
     setLobbyName(code);
     socket.emit("createLobby", code, playerName);
-    socket.on("lobbyCreated", () => {
+
+    socket.once("lobbyCreated", () => {
       setLobbyPlayers([{ id: socket.id, name: playerName }]);
       setInLobby(true);
       setIsHost(true);
@@ -95,50 +96,56 @@ const Lobby = ({ onStartGame }) => {
 
   const joinLobby = () => {
     if (!playerName || !lobbyName) {
-      setPopup({ open: true, message: "Bitte gib deinen Namen und den Lobby-Code ein!" });
+      setPopup({ open: true, message: "Please enter your name and lobby code!" });
       return;
     }
-    if (lobbyPlayers.length >= 10) {
-      setPopup({ open: true, message: "Die Lobby ist voll (maximal 10 Spieler)!" });
-      return;
-    }
-    playSound();
     socket.emit("joinLobby", lobbyName, playerName);
-    socket.on("playerJoined", (players) => {
-      setLobbyPlayers(players);
-      setInLobby(true);
-      setIsHost(false);
-    });
   };
 
   const startGame = () => {
-    if (isHost && lobbyPlayers.length >= 2 && lobbyPlayers.length <= 10) {
-      socket.emit("startGame", lobbyName);
-    } else if (lobbyPlayers.length < 2) {
-      setPopup({ open: true, message: "Mindestens 2 Spieler müssen in der Lobby sein!" });
-    } else if (lobbyPlayers.length > 10) {
-      setPopup({ open: true, message: "Maximal 10 Spieler sind erlaubt!" });
-    } else {
-      setPopup({ open: true, message: "Nur der Host kann das Spiel starten!" });
+    if (!isHost) {
+      setPopup({ open: true, message: "Only the host can start the game!" });
+      return;
     }
+    if (lobbyPlayers.length < 2) {
+      setPopup({ open: true, message: "At least 2 players needed to start!" });
+      return;
+    }
+    if (lobbyPlayers.length > 10) {
+      setPopup({ open: true, message: "Maximum 10 players allowed!" });
+      return;
+    }
+    socket.emit("startGame", lobbyName);
   };
 
   const handleCopy = () => {
     navigator.clipboard.writeText(lobbyName);
-    setPopup({ open: true, message: "Lobby-Code kopiert!" });
+    setPopup({ open: true, message: "Lobby code copied!" });
   };
 
   return (
-    <div className="min-h-screen w-full flex flex-col items-center justify-center bg-gradient-to-br from-[#2d112b] via-[#1a1a2e] to-[#3a1c71]">
+    <div className="min-h-screen w-full flex flex-col items-center justify-center bg-gradient-to-br from-[#2d112b] via-[#1a1a2e] to-[#3a1c71] relative">
+
+      {/* Discord Button oben rechts */}
+      <a
+        href="https://discord.gg/deinserverlink" // <<< Deinen Discord Link hier einfügen!
+        target="_blank"
+        rel="noopener noreferrer"
+        className="absolute top-6 right-6 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-full shadow-lg transition"
+      >
+        <FontAwesomeIcon icon={faDiscord} />
+      </a>
+
       {/* Header */}
       <div className="mb-10 flex flex-col items-center">
         <h1 className="text-5xl md:text-6xl font-extrabold text-white drop-shadow-lg mb-2 tracking-wide">Poker4Fun</h1>
-        <p className="text-xl text-gray-200 mb-4">Spiele Poker mit Freunden – kostenlos & online!</p>
+        <p className="text-xl text-gray-200 mb-4">Play poker with friends – free & online!</p>
       </div>
 
       {!inLobby ? (
         <div className="flex flex-col md:flex-row items-center justify-center gap-12 w-full max-w-4xl">
-          {/* Profilkarte */}
+          
+          {/* Profile Card */}
           <motion.div
             initial={{ opacity: 0, y: 40 }}
             animate={{ opacity: 1, y: 0 }}
@@ -150,39 +157,40 @@ const Lobby = ({ onStartGame }) => {
             </div>
             <input
               type="text"
-              placeholder="Dein Name"
+              placeholder="Your Name"
               value={playerName}
               onChange={(e) => setPlayerName(e.target.value)}
               className="w-full p-3 mb-4 rounded bg-gray-700 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-yellow-400 text-center text-lg"
               maxLength={16}
             />
-            <div className="text-white font-bold text-lg">{playerName || "Spielername"}</div>
+            <div className="text-white font-bold text-lg">{playerName || "Player Name"}</div>
           </motion.div>
 
-          {/* Lobby-Boxen */}
+          {/* Lobby Actions */}
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.7, delay: 0.2 }}
             className="flex flex-col gap-8 w-full max-w-md"
           >
-            {/* Schnelles Spiel */}
+            {/* Quick Game */}
             <div className="bg-orange-500 hover:bg-orange-600 transition rounded-xl shadow-lg p-8 flex flex-col items-center">
-              <div className="text-3xl font-extrabold text-white mb-4">Schnelles Spiel</div>
+              <div className="text-3xl font-extrabold text-white mb-4">Quick Game</div>
               <button
                 onClick={createLobby}
                 className="bg-white text-orange-600 hover:bg-orange-100 font-bold py-2 px-6 rounded-lg text-lg shadow transition mb-2"
               >
-                Lobby mit Code erstellen
+                Create Lobby
               </button>
-              <div className="text-white">Erstelle eine neue Lobby mit zufälligem Code</div>
+              <div className="text-white">Random lobby code</div>
             </div>
-            {/* Privates Spiel */}
+
+            {/* Private Game */}
             <div className="bg-green-500 hover:bg-green-600 transition rounded-xl shadow-lg p-8 flex flex-col items-center">
-              <div className="text-3xl font-extrabold text-white mb-4">Privates Spiel</div>
+              <div className="text-3xl font-extrabold text-white mb-4">Private Game</div>
               <input
                 type="text"
-                placeholder="Lobby-Code eingeben"
+                placeholder="Lobby Code"
                 value={lobbyName}
                 onChange={(e) => setLobbyName(e.target.value.toUpperCase())}
                 className="w-full p-3 mb-3 rounded bg-green-100 text-green-900 placeholder-green-400 focus:outline-none focus:ring-2 focus:ring-green-300 text-center text-lg font-mono tracking-widest"
@@ -192,9 +200,9 @@ const Lobby = ({ onStartGame }) => {
                 onClick={joinLobby}
                 className="bg-white text-green-600 hover:bg-green-100 font-bold py-2 px-6 rounded-lg text-lg shadow transition"
               >
-                Lobby beitreten
+                Join Lobby
               </button>
-              <div className="text-white mt-2">Tritt einer bestehenden Lobby bei</div>
+              <div className="text-white mt-2">Join an existing lobby</div>
             </div>
           </motion.div>
         </div>
@@ -202,15 +210,15 @@ const Lobby = ({ onStartGame }) => {
         <div className="bg-gray-900 p-8 rounded-lg shadow-2xl w-full max-w-md flex flex-col items-center">
           <div
             className="text-2xl font-bold mb-2 text-center text-white cursor-pointer select-all"
-            title="Klicken zum Kopieren"
+            title="Click to copy"
             onClick={handleCopy}
           >
-            Lobby-Code: <span className="font-mono text-yellow-400">{lobbyName}</span>
+            Lobby Code: <span className="font-mono text-yellow-400">{lobbyName}</span>
           </div>
           <div className="text-white text-lg mb-2">
-            Spieler: {lobbyPlayers.length}/10
+            Players: {lobbyPlayers.length}/10
           </div>
-          <h2 className="text-lg font-semibold mb-2 text-white">Spieler:</h2>
+          <h2 className="text-lg font-semibold mb-2 text-white">Players:</h2>
           <ul className="mb-4 w-full">
             {lobbyPlayers.map((player, index) => (
               <li key={`${player.id}-${index}`} className="text-gray-200 text-lg py-1 px-2 rounded bg-gray-800 mb-1">
@@ -218,21 +226,20 @@ const Lobby = ({ onStartGame }) => {
               </li>
             ))}
           </ul>
-          {isHost && (
+          {isHost ? (
             <button
               onClick={startGame}
               className="bg-yellow-400 hover:bg-yellow-500 text-gray-900 font-bold py-2 px-4 rounded w-full transition duration-200 text-lg"
             >
-              Spiel starten
+              Start Game
             </button>
-          )}
-          {!isHost && (
-            <div className="text-gray-400 mt-2">Warte auf den Host...</div>
+          ) : (
+            <div className="text-gray-400 mt-2">Waiting for host...</div>
           )}
         </div>
       )}
 
-      {/* MODERNES POPUP */}
+      {/* Popup */}
       {popup.open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
           <motion.div
