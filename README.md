@@ -13,50 +13,6 @@ A web-based Texas Hold'em Poker game built with Node.js, Express, and Socket.IO 
 
 ---
 
-## 🛠️ Installation
-
-1. **Clone the repository**:
-
-   ```bash
-   git clone https://github.com/lsheasel/poker-app.git
-   cd poker-app
-   ```
-
-2. **Install dependencies**:
-
-   ```bash
-   npm install
-   ```
-
-3. **Start the server**:
-
-   ```bash
-   node server.js
-   ```
-
-4. **Open the app in your browser**:
-
-   Visit `http://localhost:3000`
-
----
-
-## 📁 Project Structure
-
-```
-poker-app/
-├── client/             # Frontend files (HTML, CSS, JS)
-│   ├── index.html
-│   ├── styles.css
-│   └── script.js
-├── server/             # Backend logic
-│   └── server.js
-├── package.json        # Project configuration and dependencies
-└── README.md           # Project documentation
-```
-
-
----
-
 ## 📄 License
 
 This project is licensed under the [MIT License](LICENSE).
