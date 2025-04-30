@@ -3,6 +3,10 @@ const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
 
+
+
+
+
 const app = express();
 app.use(cors());
 
@@ -10,6 +14,8 @@ app.use(cors({
   origin: ['https://discord.com', 'https://poker4fun.xyz'],
   credentials: true
 }));
+
+
 
 
 const server = http.createServer(app);

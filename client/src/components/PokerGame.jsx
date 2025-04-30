@@ -531,18 +531,25 @@ const PokerGame = ({
               />
               
               <motion.button
-                whileHover={{ scale: isMyTurn ? 1.05 : 1 }}
-                whileTap={{ scale: isMyTurn ? 0.95 : 1 }}
-                onClick={() => onBet && onBet(Number(betInput))}
-                disabled={!isMyTurn}
-                className={`
-                  bg-gradient-to-r from-blue-500 to-blue-600 text-white font-bold 
-                  py-3 px-6 rounded-lg shadow-lg transition-all
-                  ${!isMyTurn ? 'opacity-50 cursor-not-allowed' : 'hover:from-blue-600 hover:to-blue-700'}
-                `}
-              >
-                Bet
-              </motion.button>
+  whileHover={{ scale: isMyTurn ? 1.05 : 1 }}
+  whileTap={{ scale: isMyTurn ? 0.95 : 1 }}
+  onClick={() => {
+    
+    const parsed = Number(betInput);
+    if (!isNaN(parsed)) {
+      onBet?.(parsed);
+    }
+  }}
+  disabled={!isMyTurn}
+  className={`
+    bg-gradient-to-r from-blue-500 to-blue-600 text-white font-bold 
+    py-3 px-6 rounded-lg shadow-lg transition-all
+    ${!isMyTurn ? 'opacity-50 cursor-not-allowed' : 'hover:from-blue-600 hover:to-blue-700'}
+  `}
+>
+  Bet
+</motion.button>
+
               
               <motion.button
                 whileHover={{ scale: isMyTurn ? 1.05 : 1 }}
