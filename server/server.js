@@ -34,7 +34,7 @@ io.on("connection", (socket) => {
     currentLobby = lobbyName;
     lobbies[lobbyName] = {
       host: socket.id,
-      players: [{ id: socket.id, name: playerName, chips: 1000 }],
+      players: [{ id: socket.id, name: playerName, chips: 1000, hand: [] }], // Added hand array for each player
       gameStarted: false,
       deck: [],
       communityCards: [],
@@ -61,7 +61,7 @@ io.on("connection", (socket) => {
       return;
     }
 
-    lobbies[lobbyName].players.push({ id: socket.id, name: playerName, chips: 1000 });
+    lobbies[lobbyName].players.push({ id: socket.id, name: playerName, chips: 1000, hand: [] }); // Added hand array for each player
     socket.join(lobbyName);
     io.to(lobbyName).emit("playerJoined", lobbies[lobbyName].players);
     io.to(lobbyName).emit("updatePlayers", lobbies[lobbyName].players);
@@ -84,7 +84,10 @@ io.on("connection", (socket) => {
     lobby.gameState = "preflop";
     lobby.showdownInProgress = false;
 
+    // Store player hands in the server's game state
     lobby.players.forEach((player, index) => {
+      player.hand = hands[index]; // Store the hand in the player object
+      
       setTimeout(() => {
         io.to(player.id).emit("dealCards", {
           hand: hands[index],
@@ -197,6 +200,54 @@ io.on("connection", (socket) => {
     const currentPlayerId = lobby.players[lobby.currentPlayerIndex].id;
     io.to(lobbyName).emit("currentPlayer", { playerId: currentPlayerId });
   });
+  socket.on("fold", ({ lobbyName }) => {
+    console.log(`[FOLD] Spieler ${socket.id} foldet in Lobby ${lobbyName}`);
+    
+    const lobby = lobbies[lobbyName];
+    if (!lobby || !lobby.gameStarted || lobby.showdownInProgress) {
+      console.log(`[FOLD] Lobby ${lobbyName} nicht gefunden, Spiel nicht gestartet, oder bereits im Showdown`);
+      return;
+    }
+  
+    const playerIndex = lobby.players.findIndex(p => p.id === socket.id);
+    if (playerIndex === -1) {
+      console.log(`[FOLD] Spieler ${socket.id} nicht in Lobby gefunden!`);
+      return;
+    }
+  
+    // Mark the player as folded instead of removing them
+    lobby.players[playerIndex].folded = true;
+    
+    // Notify all players about the fold
+    io.to(lobbyName).emit("playerFolded", { playerId: socket.id });
+    io.to(lobbyName).emit("updatePlayers", lobby.players);
+  
+    // Check if only one active player remains
+    const activePlayers = lobby.players.filter(p => !p.folded);
+    if (activePlayers.length <= 1) {
+      console.log(`[FOLD] Nur ein aktiver Spieler übrig, Runde beendet!`);
+      const winner = activePlayers[0];
+      winner.chips += lobby.pot;
+      io.to(lobbyName).emit("roundEnded", { winnerId: winner.id, pot: lobby.pot });
+      
+      // Start a new round after a short delay
+      setTimeout(() => {
+        startNewRound(lobbyName);
+      }, 3000);
+      return;
+    }
+  
+    // Move to the next active player
+    let nextPlayerIndex = (playerIndex + 1) % lobby.players.length;
+    // Skip folded players
+    while (lobby.players[nextPlayerIndex].folded) {
+      nextPlayerIndex = (nextPlayerIndex + 1) % lobby.players.length;
+    }
+    
+    lobby.currentPlayerIndex = nextPlayerIndex;
+    const currentPlayerId = lobby.players[lobby.currentPlayerIndex].id;
+    io.to(lobbyName).emit("currentPlayer", { playerId: currentPlayerId });
+  });
 
   socket.on("disconnect", () => {
     console.log("Player disconnected:", socket.id);
@@ -218,27 +269,28 @@ io.on("connection", (socket) => {
 // Korrigierte Funktion zum Fortschreiten des Spielzustands (5 Runden)
 function advanceGameState(lobby, lobbyName) {
   console.log(`[ADVANCE] Fortschreiten vom Zustand ${lobby.gameState}`);
+  const currentBet = lobbies[lobbyName]?.currentBet || 0;
   
   switch (lobby.gameState) {
     case "preflop":
       // Nach dem Preflop kommt der Flop (erste 3 Gemeinschaftskarten)
       dealCommunityCards(lobby, lobbyName, 3);
       lobby.gameState = "flop";
-      lobby.currentBet = 1;  // Mindestbetrag für den nächsten Call
+      lobby.currentBet = currentBet;  // Reset to 0 instead of 1
       break;
       
     case "flop":
       // Nach dem Flop kommt der Turn (4. Gemeinschaftskarte)
       dealCommunityCards(lobby, lobbyName, 1);
       lobby.gameState = "turn";
-      lobby.currentBet = 1;  // Mindestbetrag für den nächsten Call
+      lobby.currentBet = currentBet;  // Reset to 0 instead of 1
       break;
       
     case "turn":
       // Nach dem Turn kommt der River (5. Gemeinschaftskarte)
       dealCommunityCards(lobby, lobbyName, 1);
       lobby.gameState = "river";
-      lobby.currentBet = 1;  // Mindestbetrag für den nächsten Call
+      lobby.currentBet = currentBet;  // Reset to 0 instead of 1
       break;
       
     case "river":
@@ -311,16 +363,24 @@ function startNewRound(lobbyName) {
   lobby.deck = generateDeck();
   lobby.communityCards = [];
   lobby.pot = 0;
-  lobby.currentBet = 1;  // Setze den Mindestbetrag für den ersten Call
+  lobby.currentBet = 0;  // Initialize to 0 instead of 1
   lobby.actionCount = 0;
   lobby.gameStarted = true;
   lobby.gameState = "preflop";
   lobby.showdownInProgress = false;
 
+  // Reset folded status for all players
+  lobby.players.forEach(player => {
+    player.folded = false;
+  });
+
   const { hands, remainingDeck } = dealCards(lobby.deck, lobby.players.length);
   lobby.deck = remainingDeck;
 
+  // Store and send player hands
   lobby.players.forEach((player, index) => {
+    player.hand = hands[index]; // Store hands in the player objects
+    
     io.to(player.id).emit("dealCards", {
       hand: hands[index],
       position: index,
@@ -549,22 +609,22 @@ function compareHands(hand1, hand2) {
   return 0;
 }
 
+// Fixed determineWinner function that uses player.hand instead of socket.handCards
 const determineWinner = (lobby) => {
-  const players = lobby.players;
+  // Only consider players who haven't folded
+  const activePlayers = lobby.players.filter(player => !player.folded);
   const communityCards = lobby.communityCards;
   
-  // Evaluate each player's best hand
-  const playerHands = players.map(player => {
-    // Get player's hand from their socket
-    let playerSocket = io.sockets.sockets.get(player.id);
-    if (!playerSocket) {
-      console.log(`[WINNER] Spieler ${player.id} hat keine Hand!`);
-      return { player, handRank: { rank: -1 } }; // Lowest possible rank
-    }
-    
-    // Each player has 2 hole cards + 5 community cards = 7 cards total
-    // We need to find the best 5-card hand
-    const allCards = [...(playerSocket.handCards || []), ...communityCards];
+  // If only one player remains (everyone else folded), they are the winner
+  if (activePlayers.length === 1) {
+    return activePlayers[0];
+  }
+  
+  // Evaluate each active player's best hand
+  const playerHands = activePlayers.map(player => {
+    // Use the player.hand array stored in the player object
+    // Combined with community cards
+    const allCards = [...(player.hand || []), ...communityCards];
     
     if (allCards.length < 5) {
       console.log(`[WINNER] Nicht genug Karten für Spieler ${player.id}!`);

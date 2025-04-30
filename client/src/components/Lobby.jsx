@@ -182,7 +182,18 @@ const Lobby = ({ onStartGame }) => {
         <div className="flex items-center justify-between container mx-auto">
           <div className="flex items-center gap-2">
             <div className="flex items-center">
-            
+              <motion.div
+                        initial={{ rotate: -5 }}
+                        animate={{ rotate: 5 }}
+                        transition={{ 
+                          duration: 1.5, 
+                          repeat: Infinity, 
+                          repeatType: 'reverse' 
+                        }}
+                        className="text-3xl mr-2 text-white font-bold"
+                      >
+                        ♠
+                      </motion.div>
               <h2 className="text-white font-bold text-2xl">Poker4Fun</h2>
             </div>
             <button 
