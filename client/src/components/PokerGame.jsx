@@ -1,17 +1,44 @@
 import React, { useState, useEffect, useRef } from 'react';
-import './PokerGame.css';
-import socket from '../socket';
-import { stopLobbyMusic } from "./Lobby";
-import { motion, AnimatePresence } from "framer-motion";
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faDiscord, faTwitter } from '@fortawesome/free-brands-svg-icons';
-import { faBars, faTimes, faQuestionCircle, faVolumeUp, faVolumeMute, faCopy, faCrown, faUser } from '@fortawesome/free-solid-svg-icons';
 import { Link } from 'react-router-dom';
+import './PokerGame.css';
+
+import socket from '../socket';
+import { stopLobbyMusic } from './Lobby';
+
+// Font Awesome
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import {
+  faVolumeUp,
+  faVolumeMute,
+  faQuestionCircle,
+  faCopy,
+  faCrown,
+  faUser,
+  faTimes,
+  faInfoCircle,
+  faClosedCaptioning,
+  faChevronUp,
+  faChevronDown,
+  faAdjust,
+  faBars
+} from '@fortawesome/free-solid-svg-icons';
+import {
+  faDiscord,
+  faTwitter
+} from '@fortawesome/free-brands-svg-icons';
+
+// Animation
+import { motion, AnimatePresence } from 'framer-motion';
+
+
 
 // Audio management
 let tableAudio = null;
+let audioEnabled = true;
 
 function playTableMusic() {
+  if (!audioEnabled) return;
+  
   if (tableAudio) {
     tableAudio.pause();
     tableAudio.currentTime = 0;
@@ -29,6 +56,34 @@ function stopTableMusic() {
     tableAudio = null;
   }
 }
+
+function toggleTableMusic() {
+  audioEnabled = !audioEnabled;
+  if (audioEnabled) {
+    playTableMusic();
+  } else {
+    stopTableMusic();
+  }
+  return audioEnabled;
+}
+
+// Sound effects
+const playSoundEffect = (type) => {
+  if (!audioEnabled) return;
+  
+  const effects = {
+    bet: "/sounds/chip.mp3",
+    win: "/sounds/win.mp3",
+    deal: "/sounds/card_deal.mp3",
+    fold: "/sounds/fold.mp3",
+    error: "/sounds/error.mp3",
+    buttonClick: "/sounds/click.mp3"
+  };
+  
+  const sound = new window.Audio(effects[type] || effects.buttonClick);
+  sound.volume = 0.2;
+  sound.play().catch(e => console.log("Sound effect playback prevented:", e));
+};
 
 // Card utilities
 const getSuitColor = (suit) =>
@@ -48,6 +103,13 @@ const getSuitSymbol = (suit) => {
 const Card = ({ card, index, delay = 0, type = 'community' }) => {
   const initialY = type === 'player' ? 100 : -100;
   
+  // Play card deal sound
+  useEffect(() => {
+    if (delay === 0) {
+      playSoundEffect('deal');
+    }
+  }, []);
+  
   return (
     <motion.div 
       initial={{ y: initialY, opacity: 0, rotateY: 180 }}
@@ -59,7 +121,8 @@ const Card = ({ card, index, delay = 0, type = 'community' }) => {
         stiffness: 120,
         damping: 15
       }}
-      className="relative bg-white rounded-lg border-2 border-gray-300 shadow-lg w-14 h-20 flex items-center justify-center overflow-hidden"
+      className="relative bg-white rounded-lg border-2 border-gray-300 shadow-lg md:w-14 md:h-20 w-12 h-16 flex items-center justify-center overflow-hidden"
+      aria-label={`${card.value} of ${card.suit}`}
     >
       <div className="card-inner">
         <div className="card-value-top">
@@ -92,6 +155,7 @@ const Chip = ({ amount, delay = 0 }) => {
         damping: 15
       }}
       className="chip-stack relative"
+      aria-label={`Chip worth $${amount}`}
     >
       <div className="absolute -top-1 -left-1 w-14 h-14 bg-yellow-600 rounded-full shadow-inner z-10 flex items-center justify-center">
         <div className="w-12 h-12 bg-yellow-500 rounded-full border-4 border-yellow-300 flex items-center justify-center text-xs font-bold text-white">
@@ -103,7 +167,7 @@ const Chip = ({ amount, delay = 0 }) => {
 };
 
 // Player Avatar component
-const PlayerAvatar = ({ player, isCurrentPlayer, position, delay }) => {
+const PlayerAvatar = ({ player, isCurrentPlayer, position, delay, isActive, lastAction }) => {
   return (
     <motion.div
       initial={{ scale: 0.7, opacity: 0 }}
@@ -129,12 +193,22 @@ const PlayerAvatar = ({ player, isCurrentPlayer, position, delay }) => {
         }}
         className={`
           rounded-full bg-gray-800 border-4 
-          ${isCurrentPlayer ? "border-yellow-400" : "border-gray-600"} 
-          w-24 h-16 flex items-center justify-center text-white text-base font-bold 
-          transition-all duration-300
+          ${isCurrentPlayer ? "border-yellow-400" : isActive ? "border-green-400" : "border-gray-600"} 
+          md:w-24 md:h-16 w-20 h-14 flex flex-col items-center justify-center text-white text-base font-bold 
+          transition-all duration-300 relative
         `}
+        aria-label={`Player ${player.name} with ${player.chips} chips${isCurrentPlayer ? ', current turn' : ''}`}
       >
-        {player.name || "?"}
+        <div className="text-center">
+          {player.name || "?"}
+        </div>
+        
+        {/* Last action indicator */}
+        {lastAction && (
+          <div className="absolute -bottom-6 left-0 right-0 mx-auto bg-gray-800 text-xs text-center py-1 px-2 rounded-md text-yellow-300">
+            {lastAction}
+          </div>
+        )}
       </motion.div>
       <div className="mt-1 text-white text-sm font-bold">${player.chips ?? 0}</div>
     </motion.div>
@@ -142,64 +216,376 @@ const PlayerAvatar = ({ player, isCurrentPlayer, position, delay }) => {
 };
 
 // Navigation Bar Component
-const Navbar = ({ lobbyName }) => {
+const Navbar = ({ lobbyName, audioEnabled, onToggleAudio, onShowHelp }) => {
   const [showLoginTooltip, setShowLoginTooltip] = useState(false);
   return (
-    <div className="w-full bg-gray-900 bg-opacity-80 backdrop-blur-lg fixed top-0 left-0 z-50 px-6 py-4">
-            <div className="flex items-center justify-between container mx-auto">
-              <div className="flex items-center gap-2">
-                <div className="flex items-center">
-                  <motion.div
-                            initial={{ rotate: -5 }}
-                            animate={{ rotate: 5 }}
-                            transition={{ 
-                              duration: 1.5, 
-                              repeat: Infinity, 
-                              repeatType: 'reverse' 
-                            }}
-                            className="text-3xl mr-2 text-white font-bold"
-                          >
-                            ♠
-                          </motion.div>
-                  <a href="https://poker4fun.xyz" className="text-white font-bold text-2xl">Poker4Fun</a>
-                </div>
+    <div className="w-full bg-gray-900 bg-opacity-80 backdrop-blur-lg fixed top-0 left-0 z-50 px-3 md:px-6 py-2 md:py-4">
+      <div className="flex items-center justify-between container mx-auto">
+        <div className="flex items-center gap-2">
+          <div className="flex items-center">
+            <motion.div
+              initial={{ rotate: -5 }}
+              animate={{ rotate: 5 }}
+              transition={{ 
+                duration: 1.5, 
+                repeat: Infinity, 
+                repeatType: 'reverse' 
+              }}
+              className="text-2xl md:text-3xl mr-2 text-white font-bold"
+            >
+              ♠
+            </motion.div>
+            <a href="https://poker4fun.xyz" className="text-white font-bold text-xl md:text-2xl">Poker4Fun</a>
+          </div>
+        </div>
+        
+        <div className="text-center hidden md:block">
+          <div className="text-yellow-300 text-sm font-semibold">
+            Room: {lobbyName || "Poker Table"}
+          </div>
+        </div>
+        
+        <div className="flex items-center gap-2 md:gap-4">
+          <button
+            onClick={onToggleAudio}
+            className="bg-gray-700 hover:bg-gray-600 text-white p-2 rounded-full shadow-lg transition-all hover:scale-110"
+            aria-label={audioEnabled ? "Mute sound" : "Enable sound"}
+          >
+            <FontAwesomeIcon icon={audioEnabled ? faVolumeUp : faVolumeMute} />
+          </button>
+          
+          <button
+            onClick={onShowHelp}
+            className="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-full shadow-lg transition-all hover:scale-110"
+            aria-label="Show help"
+          >
+            <FontAwesomeIcon icon={faQuestionCircle} />
+          </button>
+          
+          <a
+            href="https://discord.gg/tCCdfJyZEp"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="bg-indigo-600 hover:bg-indigo-700 text-white p-2 rounded-full shadow-lg transition-all hover:scale-110"
+            aria-label="Discord"
+          >
+            <FontAwesomeIcon icon={faDiscord} />
+          </a>
+          
+          <div className="relative">
+            <button 
+              className="bg-gray-600 text-gray-400 p-2 rounded-full shadow-lg cursor-not-allowed opacity-60"
+              aria-label="Login (Coming Soon)"
+              onMouseEnter={() => setShowLoginTooltip(true)}
+              onMouseLeave={() => setShowLoginTooltip(false)}
+            >
+              <FontAwesomeIcon icon={faUser} />
+            </button>
+            {showLoginTooltip && (
+              <div className="absolute right-0 mt-2 w-32 bg-gray-800 rounded-md shadow-lg p-2 text-center text-sm text-gray-200 z-50">
+                Coming Soon
               </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Settings modal
+const SettingsModal = ({ show, onClose, audioEnabled, onToggleAudio, contrastMode, onToggleContrast }) => {
+  if (!show) return null;
+  
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ y: 20, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        exit={{ y: 20, opacity: 0 }}
+        className="bg-gray-800 rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl border border-gray-700"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-xl font-bold text-white">Settings</h3>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-white"
+            aria-label="Close settings"
+          >
+            <FontAwesomeIcon icon={faTimes} />
+          </button>
+        </div>
+        
+        <div className="space-y-4">
+          <div className="flex items-center justify-between p-3 bg-gray-700 rounded-lg">
+            <div className="flex items-center gap-3">
+              <FontAwesomeIcon icon={audioEnabled ? faVolumeUp : faVolumeMute} className="text-white" />
+              <span className="text-white">Sound</span>
+            </div>
+            <button
+              onClick={onToggleAudio}
+              className={`w-12 h-6 rounded-full relative ${audioEnabled ? 'bg-green-500' : 'bg-gray-500'}`}
+              aria-label={audioEnabled ? "Disable sound" : "Enable sound"}
+            >
+              <div className={`absolute w-5 h-5 bg-white rounded-full top-0.5 transition-all ${audioEnabled ? 'right-0.5' : 'left-0.5'}`}></div>
+            </button>
+          </div>
+          
+          <div className="flex items-center justify-between p-3 bg-gray-700 rounded-lg">
+            <div className="flex items-center gap-3">
+              <FontAwesomeIcon icon={faAdjust} className="text-white" />
+              <span className="text-white">High Contrast</span>
+            </div>
+            <button
+              onClick={onToggleContrast}
+              className={`w-12 h-6 rounded-full relative ${contrastMode ? 'bg-green-500' : 'bg-gray-500'}`}
+              aria-label={contrastMode ? "Disable high contrast" : "Enable high contrast"}
+            >
+              <div className={`absolute w-5 h-5 bg-white rounded-full top-0.5 transition-all ${contrastMode ? 'right-0.5' : 'left-0.5'}`}></div>
+            </button>
+          </div>
+          
+          <div className="flex items-center justify-between p-3 bg-gray-700 rounded-lg">
+            <div className="flex items-center gap-3">
+              <FontAwesomeIcon icon={faClosedCaptioning} className="text-white" />
+              <span className="text-white">Action Text</span>
+            </div>
+            <button
+              className="w-12 h-6 rounded-full relative bg-green-500"
+              aria-label="Action text is enabled"
+            >
+              <div className="absolute w-5 h-5 bg-white rounded-full top-0.5 right-0.5"></div>
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+};
+
+// Help modal with poker rules
+const HelpModal = ({ show, onClose }) => {
+  const [activeTab, setActiveTab] = useState('rules');
+  
+  if (!show) return null;
+  
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ y: 20, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        exit={{ y: 20, opacity: 0 }}
+        className="bg-gray-800 rounded-xl p-4 md:p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-auto shadow-2xl border border-gray-700"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-xl font-bold text-white">Poker Help</h3>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-white"
+            aria-label="Close help"
+          >
+            <FontAwesomeIcon icon={faTimes} />
+          </button>
+        </div>
+        
+        <div className="flex space-x-2 mb-4">
+          <button
+            className={`px-4 py-2 rounded-lg ${activeTab === 'rules' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'}`}
+            onClick={() => setActiveTab('rules')}
+          >
+            Rules
+          </button>
+          <button
+            className={`px-4 py-2 rounded-lg ${activeTab === 'hands' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'}`}
+            onClick={() => setActiveTab('hands')}
+          >
+            Hand Rankings
+          </button>
+          <button
+            className={`px-4 py-2 rounded-lg ${activeTab === 'controls' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'}`}
+            onClick={() => setActiveTab('controls')}
+          >
+            Controls
+          </button>
+        </div>
+        
+        <div className="text-gray-200 space-y-4">
+          {activeTab === 'rules' && (
+            <>
+              <h4 className="text-lg font-bold text-yellow-300">How to Play Texas Hold'em</h4>
+              <p>Texas Hold'em is played with a standard 52-card deck. Each player receives two private cards, and five community cards are dealt face up.</p>
               
+              <h5 className="font-bold text-white mt-3">Game Flow:</h5>
+              <ol className="list-decimal pl-5 space-y-2">
+                <li><strong>Blinds:</strong> The game begins with two players posting blinds (forced bets).</li>
+                <li><strong>Pre-Flop:</strong> Each player is dealt two private cards, followed by a betting round.</li>
+                <li><strong>Flop:</strong> Three community cards are dealt face up, followed by a betting round.</li>
+                <li><strong>Turn:</strong> A fourth community card is dealt, followed by a betting round.</li>
+                <li><strong>River:</strong> A fifth and final community card is dealt, followed by a final betting round.</li>
+                <li><strong>Showdown:</strong> If multiple players remain, they reveal their cards and the best hand wins.</li>
+              </ol>
               
+              <h5 className="font-bold text-white mt-3">Betting Options:</h5>
+              <ul className="list-disc pl-5 space-y-2">
+                <li><strong>Check:</strong> Pass the action to the next player (only if no bet has been made).</li>
+                <li><strong>Bet:</strong> Place a wager of your choice.</li>
+                <li><strong>Call:</strong> Match the current bet amount.</li>
+                <li><strong>Fold:</strong> Discard your hand and exit the round.</li>
+              </ul>
+            </>
+          )}
+          
+          {activeTab === 'hands' && (
+            <div className="space-y-3">
+              <h4 className="text-lg font-bold text-yellow-300">Poker Hand Rankings</h4>
+              <p>From highest to lowest:</p>
               
-              <div className={`absolute md:relative top-full left-0 w-full md:w-auto p-4 md:p-0 bg-gray-900 md:bg-transparent transition-all duration-300 transform`}>
-                <div className="flex flex-col md:flex-row items-center gap-6">
-                  <div className="flex gap-3">
-                    <a
-                      href="https://discord.gg/tCCdfJyZEp"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="bg-indigo-600 hover:bg-indigo-700 text-white p-2 rounded-full shadow-lg transition-all hover:scale-110"
-                      aria-label="Discord"
-                    >
-                      <FontAwesomeIcon icon={faDiscord} />
-                    </a>
-                    
-                    <div className="relative">
-                      <button 
-                        className="bg-gray-600 text-gray-400 p-2 rounded-full shadow-lg cursor-not-allowed opacity-60"
-                        aria-label="Login (Coming Soon)"
-                        onMouseEnter={() => setShowLoginTooltip(true)}
-                        onMouseLeave={() => setShowLoginTooltip(false)}
-                      >
-                        <FontAwesomeIcon icon={faUser} />
-                      </button>
-                      {showLoginTooltip && (
-                        <div className="absolute right-0 mt-2 w-32 bg-gray-800 rounded-md shadow-lg p-2 text-center text-sm text-gray-200 z-50">
-                          Coming Soon
-                        </div>
-                      )}
-                    </div>
-                  </div>
+              <div className="space-y-2">
+                <div className="bg-gray-700 p-3 rounded-lg">
+                  <h5 className="font-bold text-white">Royal Flush</h5>
+                  <p className="text-sm">A, K, Q, J, 10 all of the same suit</p>
+                </div>
+                
+                <div className="bg-gray-700 p-3 rounded-lg">
+                  <h5 className="font-bold text-white">Straight Flush</h5>
+                  <p className="text-sm">Five cards in sequence, all of the same suit</p>
+                </div>
+                
+                <div className="bg-gray-700 p-3 rounded-lg">
+                  <h5 className="font-bold text-white">Four of a Kind</h5>
+                  <p className="text-sm">Four cards of the same rank</p>
+                </div>
+                
+                <div className="bg-gray-700 p-3 rounded-lg">
+                  <h5 className="font-bold text-white">Full House</h5>
+                  <p className="text-sm">Three of a kind plus a pair</p>
+                </div>
+                
+                <div className="bg-gray-700 p-3 rounded-lg">
+                  <h5 className="font-bold text-white">Flush</h5>
+                  <p className="text-sm">Five cards of the same suit, not in sequence</p>
+                </div>
+                
+                <div className="bg-gray-700 p-3 rounded-lg">
+                  <h5 className="font-bold text-white">Straight</h5>
+                  <p className="text-sm">Five cards in sequence, not all same suit</p>
+                </div>
+                
+                <div className="bg-gray-700 p-3 rounded-lg">
+                  <h5 className="font-bold text-white">Three of a Kind</h5>
+                  <p className="text-sm">Three cards of the same rank</p>
+                </div>
+                
+                <div className="bg-gray-700 p-3 rounded-lg">
+                  <h5 className="font-bold text-white">Two Pair</h5>
+                  <p className="text-sm">Two different pairs</p>
+                </div>
+                
+                <div className="bg-gray-700 p-3 rounded-lg">
+                  <h5 className="font-bold text-white">Pair</h5>
+                  <p className="text-sm">Two cards of the same rank</p>
+                </div>
+                
+                <div className="bg-gray-700 p-3 rounded-lg">
+                  <h5 className="font-bold text-white">High Card</h5>
+                  <p className="text-sm">When no other hand applies, highest card wins</p>
                 </div>
               </div>
             </div>
-          </div>
+          )}
+          
+          {activeTab === 'controls' && (
+            <>
+              <h4 className="text-lg font-bold text-yellow-300">Game Controls</h4>
+              
+              <div className="space-y-3">
+                <div className="bg-gray-700 p-3 rounded-lg">
+                  <h5 className="font-bold text-white">Betting</h5>
+                  <p>Enter an amount in the input field and click "Bet" to place a bet.</p>
+                </div>
+                
+                <div className="bg-gray-700 p-3 rounded-lg">
+                  <h5 className="font-bold text-white">Call</h5>
+                  <p>Match the current bet to stay in the hand.</p>
+                </div>
+                
+                <div className="bg-gray-700 p-3 rounded-lg">
+                  <h5 className="font-bold text-white">Fold</h5>
+                  <p>Discard your hand and forfeit the current pot.</p>
+                </div>
+                
+                <div className="bg-gray-700 p-3 rounded-lg">
+                  <h5 className="font-bold text-white">Settings</h5>
+                  <p>Access settings like sound toggles and visual preferences.</p>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+};
+
+// Game Stage Indicator
+const GameStageIndicator = ({ stage }) => {
+  const stages = {
+    'preflop': 'Pre-Flop',
+    'flop': 'Flop',
+    'turn': 'Turn',
+    'river': 'River',
+    'showdown': 'Showdown'
+  };
+  
+  return (
+    <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-gray-800 bg-opacity-80 px-4 py-2 rounded-full text-white font-bold text-sm border border-yellow-500">
+      {stages[stage] || 'Pre-Flop'}
+    </div>
+  );
+};
+
+// Toast notification system
+const Toast = ({ message, type, onClose }) => {
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      onClose();
+    }, 3000);
+    
+    return () => clearTimeout(timer);
+  }, [onClose]);
+  
+  const bgColor = {
+    success: 'bg-green-500',
+    error: 'bg-red-500',
+    info: 'bg-blue-500',
+  }[type] || 'bg-blue-500';
+  
+  return (
+    <motion.div
+      initial={{ x: 300, opacity: 0 }}
+      animate={{ x: 0, opacity: 1 }}
+      exit={{ x: 300, opacity: 0 }}
+      className={`${bgColor} text-white px-4 py-2 rounded-lg shadow-lg mb-2 flex justify-between items-center`}
+    >
+      <span>{message}</span>
+      <button onClick={onClose} className="ml-2">
+        <FontAwesomeIcon icon={faTimes} />
+      </button>
+    </motion.div>
   );
 };
 
@@ -220,14 +606,58 @@ const PokerGame = ({
   myPlayerId,
   opponentId,
   opponentName,
-  opponentChips
+  opponentChips,
+  gameStage = 'preflop'
 }) => {
   const [betInput, setBetInput] = useState('');
   const [isDealing, setIsDealing] = useState(false);
   const [confetti, setConfetti] = useState(false);
+  const [audioEnabled, setAudioEnabled] = useState(true);
+  const [contrastMode, setContrastMode] = useState(false);
+  const [showHelpModal, setShowHelpModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [toasts, setToasts] = useState([]);
+  const [inputError, setInputError] = useState('');
+  const [betOptions, setBetOptions] = useState([]);
+  const [showBetOptions, setShowBetOptions] = useState(false);
+  const [lastActions, setLastActions] = useState({});
   const tableRef = useRef(null);
   
   const isMyTurn = currentPlayerId === myPlayerId;
+
+  // On component mount, show help modal for new users
+  useEffect(() => {
+    const hasSeenHelp = localStorage.getItem('poker4fun_seen_help');
+    if (!hasSeenHelp && gameStarted) {
+      setTimeout(() => {
+        setShowHelpModal(true);
+        localStorage.setItem('poker4fun_seen_help', 'true');
+      }, 1500);
+    }
+  }, [gameStarted]);
+
+  // Generate bet options based on player money
+  useEffect(() => {
+    if (playerMoney > 0) {
+      const options = [];
+      // Min bet
+      options.push(Math.max(10, Math.floor(playerMoney * 0.05)));
+      // 1/4 pot
+      options.push(Math.max(10, Math.floor(pot * 0.25)));
+      // 1/2 pot
+      options.push(Math.max(10, Math.floor(pot * 0.5)));
+      // 3/4 pot
+      options.push(Math.max(10, Math.floor(pot * 0.75)));
+      // Pot
+      options.push(Math.max(10, pot));
+      // All-in
+      options.push(playerMoney);
+      
+      // Remove duplicates and sort
+      const uniqueOptions = [...new Set(options)].sort((a, b) => a - b);
+      setBetOptions(uniqueOptions.filter(opt => opt <= playerMoney));
+    }
+  }, [pot, playerMoney]);
 
   // Winning popup state
   const [winnerPopup, setWinnerPopup] = useState({ 
@@ -246,8 +676,9 @@ const PokerGame = ({
         amount: pot
       });
       setConfetti(true);
+      playSoundEffect('win');
       
-      // Reset animations
+      // Reset animations after showing winner
       setTimeout(() => {
         setWinnerPopup({ show: false, name: '', amount: 0 });
         setConfetti(false);
@@ -258,7 +689,7 @@ const PokerGame = ({
     return () => socket.off("roundEnded", handleRoundEnded);
   }, [players]);
 
-  // Dealing animation
+  // Dealing animation with sound
   useEffect(() => {
     if (playerHand.length > 0) {
       setIsDealing(true);
@@ -268,14 +699,20 @@ const PokerGame = ({
     }
   }, [playerHand]);
 
-  // Table music
+  // Table music setup
   useEffect(() => {
     stopLobbyMusic();
     playTableMusic();
     return () => stopTableMusic();
   }, []);
 
-  // Hand evaluation
+  // Audio toggle handler
+  const handleToggleAudio = () => {
+    const newAudioState = toggleTableMusic();
+    setAudioEnabled(newAudioState);
+  };
+
+  // Hand evaluation helper function
   const evaluateHand = (playerHand, communityCards) => {
     const allCards = [...playerHand, ...communityCards];
     if (allCards.length < 5) return "Waiting for cards...";
@@ -336,6 +773,27 @@ const PokerGame = ({
     return "High Card";
   };
 
+  // Handle bet submission
+  const handleBetSubmit = () => {
+    const betAmount = parseInt(betInput);
+    if (isNaN(betAmount) || betAmount <= 0) {
+      setInputError("Please enter a valid bet amount");
+      playSoundEffect('error');
+      return;
+    }
+    
+    if (betAmount > playerMoney) {
+      setInputError("You don't have enough chips");
+      playSoundEffect('error');
+      return;
+    }
+    
+    setInputError('');
+    playSoundEffect('bet');
+    onBet?.(betAmount);
+    setBetInput('');
+  };
+
   // Player positions with proper distribution around the table
   const playerPositions = [
     { left: "15%", top: "20%" },
@@ -349,6 +807,11 @@ const PokerGame = ({
     { left: "10%", bottom: "10%" },
     { right: "10%", bottom: "10%" }
   ];
+
+  // Handle toast dismissal
+  const dismissToast = (id) => {
+    setToasts(prev => prev.filter(toast => toast.id !== id));
+  };
 
   // Confetti effect
   const renderConfetti = () => {
@@ -366,15 +829,50 @@ const PokerGame = ({
     });
   };
 
+  // Handle keyboard shortcuts
+  useEffect(() => {
+    const handleKeyPress = (e) => {
+      if (!isMyTurn) return;
+      
+      switch (e.key.toLowerCase()) {
+        case 'c':
+          onCall?.();
+          break;
+        case 'f':
+          onFold?.();
+          break;
+        case 'b':
+          if (betInput) handleBetSubmit();
+          break;
+        case 'enter':
+          if (betInput) handleBetSubmit();
+          break;
+        default:
+          break;
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [isMyTurn, betInput, onCall, onFold]);
+
   return (
-    <div className="flex flex-col h-screen">
+    <div className={`flex flex-col h-screen ${contrastMode ? 'high-contrast' : ''}`}>
       {/* Navbar */}
-      <Navbar lobbyName={lobbyName} />
+      <Navbar 
+        lobbyName={lobbyName} 
+        audioEnabled={audioEnabled} 
+        onToggleAudio={handleToggleAudio} 
+        onShowHelp={() => setShowHelpModal(true)} 
+      />
       
       {/* Game container - takes remaining height */}
-      <div className="flex-1 overflow-hidden bg-gradient-to-br from-[#2d112b] via-[#1a1a2e] to-[#3a1c71] flex flex-col items-center justify-center">
+      <div className="flex-1 overflow-hidden bg-gradient-to-br from-[#2d112b] via-[#1a1a2e] to-[#3a1c71] flex flex-col items-center justify-center pt-16">
         {/* Confetti effect */}
         {confetti && <div className="confetti-container absolute inset-0 overflow-hidden">{renderConfetti()}</div>}
+        
+        {/* Game stage indicator */}
+        <GameStageIndicator stage={gameStage} />
 
         {/* Table */}
         <motion.div
@@ -382,7 +880,7 @@ const PokerGame = ({
           initial={{ scale: 0.8, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ duration: 0.7, type: "spring" }}
-          className="relative w-[600px] h-[500px] mx-auto rounded-full border-8 border-[#8B4513] shadow-2xl flex items-center justify-center mt-16"
+          className="relative w-full max-w-[600px] h-[400px] md:h-[500px] mx-auto rounded-full border-8 border-[#8B4513] shadow-2xl flex items-center justify-center"
           style={{
             background: "linear-gradient(135deg, rgba(0,120,60,1) 0%, rgba(0,80,40,1) 50%, rgba(0,60,30,1) 100%)",
           }}
@@ -400,9 +898,9 @@ const PokerGame = ({
             initial={{ scale: 0.8, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ duration: 0.5, type: "spring" }}
-            className="absolute top-[21%] transform -translate-x-1/2 text-center z-10"
+            className="absolute top-[21%]  transform -translate-x-1/2 text-center z-10"
           >
-            <div className="bg-green-900 text-white px-6 py-3 rounded-full shadow-lg border border-yellow-500">
+            <div className="bg-green-900 text-white px-4 py-2 md:px-6 md:py-3 rounded-full shadow-lg border border-yellow-500">
               <span className="mr-2">POT:</span>
               <span className="text-yellow-300 font-bold text-xl">${pot}</span>
             </div>
@@ -416,7 +914,7 @@ const PokerGame = ({
           </motion.div>
 
           {/* Community Cards */}
-          <div className="absolute left-1/2 top-[45%] transform -translate-x-1/2 flex space-x-3 z-10">
+          <div className="absolute left-1/2 top-[45%] transform -translate-x-1/2 flex space-x-1 md:space-x-3 z-10">
             {communityCards.map((card, i) => (
               <Card 
                 key={i} 
@@ -429,7 +927,7 @@ const PokerGame = ({
           </div>
 
           {/* Player Hand */}
-          <div className="absolute left-1/2 bottom-16 transform -translate-x-1/2 flex space-x-4 z-20">
+          <div className="absolute left-1/2 bottom-12 md:bottom-16 transform -translate-x-1/2 flex space-x-2 md:space-x-4 z-20">
             {playerHand.map((card, i) => (
               <Card 
                 key={i} 
@@ -447,9 +945,9 @@ const PokerGame = ({
               initial={{ y: 20, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               transition={{ delay: 0.5, duration: 0.4 }}
-              className="absolute left-1/2 bottom-4 transform -translate-x-1/2 z-30"
+              className="absolute left-1/2 bottom-2 md:bottom-4 transform -translate-x-1/2 z-30"
             >
-              <div className="bg-gray-900 text-yellow-300 px-6 py-3 rounded-full shadow-lg text-lg font-bold border-2 border-yellow-400">
+              <div className="bg-gray-900 text-yellow-300 px-4 py-2 md:px-6 md:py-3 rounded-full shadow-lg text-sm md:text-lg font-bold border-2 border-yellow-400">
                 {evaluateHand(playerHand, communityCards)}
               </div>
             </motion.div>
@@ -461,11 +959,27 @@ const PokerGame = ({
               key={player.id || idx}
               player={player}
               isCurrentPlayer={currentPlayerId === player.id}
+              isActive={playerTurn === player.id}
               position={playerPositions[idx] || { left: "50%", top: "50%" }}
               delay={0.2 + idx * 0.1}
+              lastAction={lastActions[player.id]}
             />
           ))}
         </motion.div>
+
+        {/* Toast notifications */}
+        <div className="fixed top-20 right-5 z-50 w-64">
+          <AnimatePresence>
+            {toasts.map(toast => (
+              <Toast 
+                key={toast.id} 
+                message={toast.message} 
+                type={toast.type} 
+                onClose={() => dismissToast(toast.id)} 
+              />
+            ))}
+          </AnimatePresence>
+        </div>
 
         {/* Winner Popup */}
         <AnimatePresence>
@@ -488,14 +1002,14 @@ const PokerGame = ({
                   times: [0, 0.2, 0.4, 0.6, 0.8, 1],
                   repeat: Infinity
                 }}
-                className="bg-gradient-to-br from-yellow-400 to-pink-500 rounded-2xl shadow-2xl px-12 py-8 flex flex-col items-center border-4 border-white"
+                className="bg-gradient-to-br from-yellow-400 to-pink-500 rounded-2xl shadow-2xl px-8 py-6 md:px-12 md:py-8 flex flex-col items-center border-4 border-white"
               >
-                <div className="text-4xl font-extrabold text-white mb-3 drop-shadow-lg">
+                <div className="text-3xl md:text-4xl font-extrabold text-white mb-3 drop-shadow-lg">
                   🏆 Winner!
                 </div>
-                <div className="text-3xl font-bold text-white mb-2">{winnerPopup.name}</div>
-                <div className="text-xl text-white mb-3">wins the pot of</div>
-                <div className="text-4xl font-extrabold text-yellow-200 mb-3 tracking-wider">
+                <div className="text-2xl md:text-3xl font-bold text-white mb-2">{winnerPopup.name}</div>
+                <div className="text-lg md:text-xl text-white mb-3">wins the pot of</div>
+                <div className="text-3xl md:text-4xl font-extrabold text-yellow-200 mb-3 tracking-wider">
                   ${winnerPopup.amount}
                 </div>
                 <div className="text-3xl">🎉</div>
@@ -510,130 +1024,259 @@ const PokerGame = ({
             initial={{ y: 50, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: 0.3, duration: 0.5 }}
-            className="w-[600px] mx-auto flex flex-col items-center mt-4 z-30"
+            className="w-full max-w-[600px] mx-auto flex flex-col items-center mt-4 px-4 z-30"
           >
             <div className={`
-              text-white text-xl font-bold mb-3 px-6 py-2 rounded-full
+              text-white text-lg md:text-xl font-bold mb-3 px-4 py-1 md:px-6 md:py-2 rounded-full
               ${isMyTurn ? 'bg-green-600' : 'bg-gray-700'}
               transition-all duration-300
             `}>
               {isMyTurn ? "Your Turn!" : "Waiting for opponent..."}
             </div>
             
-            <div className="flex space-x-4 mb-2">
-              <input
-                type="number"
-                value={betInput}
-                onChange={(e) => setBetInput(e.target.value)}
-                className="p-3 rounded-lg text-black w-32 border-2 border-gray-300 focus:border-blue-500 focus:outline-none transition-all"
-                placeholder="Amount"
-                disabled={!isMyTurn}
-              />
+            {/* Responsive action buttons for mobile and desktop */}
+            <div className="flex flex-col md:flex-row w-full space-y-2 md:space-y-0 md:space-x-4 mb-2">
+              <div className="flex flex-row space-x-2 md:space-x-0 md:flex-col md:space-y-2 md:w-1/3">
+                <input
+                  type="number"
+                  value={betInput}
+                  onChange={(e) => {
+                    setBetInput(e.target.value);
+                    setInputError('');
+                  }}
+                  className={`p-2 md:p-3 rounded-lg text-black w-full border-2 ${inputError ? 'border-red-500' : 'border-gray-300'} focus:border-blue-500 focus:outline-none transition-all`}
+                  placeholder="Amount"
+                  disabled={!isMyTurn}
+                  aria-label="Bet amount"
+                />
+                
+                {/* Quick bet options dropdown */}
+                <div className="relative w-full">
+                  <button
+                    onClick={() => setShowBetOptions(!showBetOptions)}
+                    disabled={!isMyTurn}
+                    className={`
+                      w-full bg-gray-700 text-white p-2 md:p-3 rounded-lg flex items-center justify-between
+                      ${!isMyTurn ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-600'}
+                    `}
+                    aria-label="Quick bet options"
+                  >
+                    <span>Quick Bets</span>
+                    <FontAwesomeIcon icon={showBetOptions ? faChevronUp : faChevronDown} />
+                  </button>
+                  
+                  {showBetOptions && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      className="absolute bottom-full mb-1 left-0 right-0 bg-gray-800 rounded-lg shadow-lg z-50 overflow-hidden"
+                    >
+                      {betOptions.map((amount, i) => (
+                        <button
+                          key={i}
+                          onClick={() => {
+                            setBetInput(amount.toString());
+                            setShowBetOptions(false);
+                            playSoundEffect('buttonClick');
+                          }}
+                          className="w-full text-left px-4 py-2 text-white hover:bg-gray-700 transition-colors"
+                        >
+                          {i === betOptions.length - 1 ? 'All-in' : `$${amount}`}
+                        </button>
+                      ))}
+                    </motion.div>
+                  )}
+                </div>
+              </div>
               
-              <motion.button
-  whileHover={{ scale: isMyTurn ? 1.05 : 1 }}
-  whileTap={{ scale: isMyTurn ? 0.95 : 1 }}
-  onClick={() => {
-    
-    const parsed = Number(betInput);
-    if (!isNaN(parsed)) {
-      onBet?.(parsed);
-    }
-  }}
-  disabled={!isMyTurn}
-  className={`
-    bg-gradient-to-r from-blue-500 to-blue-600 text-white font-bold 
-    py-3 px-6 rounded-lg shadow-lg transition-all
-    ${!isMyTurn ? 'opacity-50 cursor-not-allowed' : 'hover:from-blue-600 hover:to-blue-700'}
-  `}
->
-  Bet
-</motion.button>
-
-              
-              <motion.button
-                whileHover={{ scale: isMyTurn ? 1.05 : 1 }}
-                whileTap={{ scale: isMyTurn ? 0.95 : 1 }}
-                onClick={onCall}
-                disabled={!isMyTurn}
-                className={`
-                  bg-gradient-to-r from-green-500 to-green-600 text-white font-bold 
-                  py-3 px-6 rounded-lg shadow-lg transition-all
-                  ${!isMyTurn ? 'opacity-50 cursor-not-allowed' : 'hover:from-green-600 hover:to-green-700'}
-                `}
-              >
-                Call
-              </motion.button>
-              
-              <motion.button
-                whileHover={{ scale: isMyTurn ? 1.05 : 1 }}
-                whileTap={{ scale: isMyTurn ? 0.95 : 1 }}
-                onClick={onFold}
-                disabled={!isMyTurn}
-                className={`
-                  bg-gradient-to-r from-red-500 to-red-600 text-white font-bold 
-                  py-3 px-6 rounded-lg shadow-lg transition-all
-                  ${!isMyTurn ? 'opacity-50 cursor-not-allowed' : 'hover:from-red-600 hover:to-red-700'}
-                `}
-              >
-                Fold
-              </motion.button>
+              <div className="flex justify-between md:justify-end space-x-2 md:space-x-4 md:w-2/3">
+                <motion.button
+                  whileHover={{ scale: isMyTurn ? 1.05 : 1 }}
+                  whileTap={{ scale: isMyTurn ? 0.95 : 1 }}
+                  onClick={handleBetSubmit}
+                  disabled={!isMyTurn}
+                  className={`
+                    flex-1 md:flex-initial bg-gradient-to-r from-blue-500 to-blue-600 text-white font-bold 
+                    py-2 md:py-3 px-4 md:px-6 rounded-lg shadow-lg transition-all
+                    ${!isMyTurn ? 'opacity-50 cursor-not-allowed' : 'hover:from-blue-600 hover:to-blue-700'}
+                  `}
+                  aria-label="Place bet"
+                >
+                  Bet
+                </motion.button>
+                
+                <motion.button
+                  whileHover={{ scale: isMyTurn ? 1.05 : 1 }}
+                  whileTap={{ scale: isMyTurn ? 0.95 : 1 }}
+                  onClick={() => {
+                    onCall?.();
+                    playSoundEffect('bet');
+                  }}
+                  disabled={!isMyTurn}
+                  className={`
+                    flex-1 md:flex-initial bg-gradient-to-r from-green-500 to-green-600 text-white font-bold 
+                    py-2 md:py-3 px-4 md:px-6 rounded-lg shadow-lg transition-all
+                    ${!isMyTurn ? 'opacity-50 cursor-not-allowed' : 'hover:from-green-600 hover:to-green-700'}
+                  `}
+                  aria-label="Call current bet"
+                >
+                  Call
+                </motion.button>
+                
+                <motion.button
+                  whileHover={{ scale: isMyTurn ? 1.05 : 1 }}
+                  whileTap={{ scale: isMyTurn ? 0.95 : 1 }}
+                  onClick={() => {
+                    onFold?.();
+                    playSoundEffect('fold');
+                  }}
+                  disabled={!isMyTurn}
+                  className={`
+                    flex-1 md:flex-initial bg-gradient-to-r from-red-500 to-red-600 text-white font-bold 
+                    py-2 md:py-3 px-4 md:px-6 rounded-lg shadow-lg transition-all
+                    ${!isMyTurn ? 'opacity-50 cursor-not-allowed' : 'hover:from-red-600 hover:to-red-700'}
+                  `}
+                  aria-label="Fold hand"
+                >
+                  Fold
+                </motion.button>
+              </div>
             </div>
+            
+            {/* Error message */}
+            {inputError && (
+              <div className="text-red-500 text-sm mt-1 mb-2">
+                {inputError}
+              </div>
+            )}
+            
+            {/* Keyboard shortcuts help */}
           </motion.div>
         )}
         
-        {/* CSS for animations */}
-        <style jsx>{`
-          @keyframes fall {
-            0% { transform: translateY(-100vh) rotate(0deg); }
-            100% { transform: translateY(100vh) rotate(360deg); }
-          }
-          
-          .confetti {
-            position: absolute;
-            width: 10px;
-            height: 10px;
-            animation: fall 4s ease-out forwards;
-          }
-          
-          .card-inner {
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            height: 100%;
-            width: 100%;
-            padding: 0.25rem;
-          }
-          
-          .card-value-top {
-            display: flex;
-            flex-direction: column;
-            align-items: flex-start;
-            font-weight: bold;
-          }
-          
-          .card-suit {
-            font-size: 1.5rem;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            flex-grow: 1;
-          }
-          
-          .card-value-bottom {
-            display: flex;
-            flex-direction: column;
-            align-items: flex-end;
-            transform: rotate(180deg);
-            font-weight: bold;
-          }
-          
-          .chip-stack {
-            transform: rotate(45deg);
-            margin: -8px 4px;
-          }
-        `}</style>
+        {/* Settings Modal */}
+        <AnimatePresence>
+          {showSettingsModal && (
+            <SettingsModal 
+              show={showSettingsModal} 
+              onClose={() => setShowSettingsModal(false)} 
+              audioEnabled={audioEnabled} 
+              onToggleAudio={handleToggleAudio}
+              contrastMode={contrastMode}
+              onToggleContrast={() => setContrastMode(!contrastMode)}
+            />
+          )}
+        </AnimatePresence>
+        
+        {/* Help Modal */}
+        <AnimatePresence>
+          {showHelpModal && (
+            <HelpModal 
+              show={showHelpModal} 
+              onClose={() => setShowHelpModal(false)} 
+            />
+          )}
+        </AnimatePresence>
+        
+        {/* Footer with settings button */}
+        <div className="fixed bottom-4 right-4 z-40">
+          <button 
+            className="bg-gray-800 hover:bg-gray-700 text-white p-3 rounded-full shadow-lg transition-all hover:scale-110"
+            onClick={() => setShowSettingsModal(true)}
+            aria-label="Open settings"
+          >
+            <FontAwesomeIcon icon={faBars} />
+          </button>
+        </div>
       </div>
+      
+      {/* CSS for animations */}
+      <style jsx>{`
+        @keyframes fall {
+          0% { transform: translateY(-100vh) rotate(0deg); }
+          100% { transform: translateY(100vh) rotate(360deg); }
+        }
+        
+        .confetti {
+          position: absolute;
+          width: 10px;
+          height: 10px;
+          animation: fall 4s ease-out forwards;
+        }
+        
+        .card-inner {
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
+          height: 100%;
+          width: 100%;
+          padding: 0.25rem;
+        }
+        
+        .card-value-top {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          font-weight: bold;
+          font-size: 0.8rem;
+        }
+        
+        .card-suit {
+          font-size: 1.5rem;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          flex-grow: 1;
+        }
+        
+        .card-value-bottom {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-end;
+          transform: rotate(180deg);
+          font-weight: bold;
+          font-size: 0.8rem;
+        }
+        
+        .chip-stack {
+          transform: rotate(45deg);
+          margin: -8px 4px;
+        }
+        
+        /* High contrast mode */
+        .high-contrast .card-suit.text-red-600,
+        .high-contrast .card-value-top .text-red-600,
+        .high-contrast .card-value-bottom .text-red-600 {
+          color: #ff0000 !important;
+          font-weight: 900;
+        }
+        
+        .high-contrast .card-suit.text-black,
+        .high-contrast .card-value-top .text-black,
+        .high-contrast .card-value-bottom .text-black {
+          color: #000000 !important;
+          font-weight: 900;
+        }
+        
+        /* Better focus indicators for accessibility */
+        button:focus, input:focus {
+          outline: 2px solid #3b82f6;
+          outline-offset: 2px;
+        }
+        
+        /* Add responsive styles */
+        @media (max-width: 640px) {
+          .card-suit {
+            font-size: 1.2rem;
+          }
+          
+          .card-value-top,
+          .card-value-bottom {
+            font-size: 0.7rem;
+          }
+        }
+      `}</style>
     </div>
   );
 };
