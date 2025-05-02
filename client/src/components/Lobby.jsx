@@ -46,6 +46,7 @@ const Lobby = ({ onStartGame }) => {
   const [muted, setMuted] = useState(localStorage.getItem("muted") === "true");
   const [howToPlayOpen, setHowToPlayOpen] = useState(false);
   const [showLoginTooltip, setShowLoginTooltip] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     if (!muted) {
@@ -71,6 +72,7 @@ const Lobby = ({ onStartGame }) => {
     const handlePlayerJoined = (players) => {
       setLobbyPlayers(players);
       setInLobby(true);
+      setIsLoading(false);
     };
 
     const handleGameStarted = () => {
@@ -107,7 +109,10 @@ const Lobby = ({ onStartGame }) => {
     setLobbyName(code);
     socket.emit("createLobby", code, playerName);
 
+    setIsLoading(true);
+
     socket.once("lobbyCreated", () => {
+      setIsLoading(false);
       setLobbyPlayers([{ id: socket.id, name: playerName }]);
       setInLobby(true);
       setIsHost(true);
@@ -124,6 +129,8 @@ const Lobby = ({ onStartGame }) => {
       setPopup({ open: true, message: "Please enter a lobby code!", type: "error" });
       return;
     }
+    setIsLoading(true);
+
     socket.emit("joinLobby", lobbyName, playerName);
   };
 
@@ -167,8 +174,9 @@ const Lobby = ({ onStartGame }) => {
       </g>
     </svg>
   );
-
   return (
+    
+
     <div className="min-h-screen w-full flex flex-col items-center justify-center bg-gradient-to-br from-purple-900 via-indigo-900 to-blue-900 relative overflow-x-hidden">
       {/* Background Elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -401,6 +409,79 @@ const Lobby = ({ onStartGame }) => {
             )}
           </motion.div>
         )}
+
+
+<AnimatePresence>
+  {isLoading && (
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-70 backdrop-blur-sm"
+    >
+      <motion.div
+        initial={{ scale: 0.8, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.8, opacity: 0 }}
+        className="bg-gray-800 rounded-xl shadow-2xl p-8 flex flex-col items-center max-w-md mx-4 border border-gray-700"
+      >
+        <div className="mb-4">
+          <motion.div
+            animate={{ 
+              rotate: 360,
+              transition: { 
+                duration: 1.5,
+                repeat: Infinity,
+                ease: "linear"
+              }
+            }}
+            className="text-5xl text-blue-400"
+          >
+            ♠
+          </motion.div>
+        </div>
+        <div className="text-white text-lg font-medium mb-2">
+          {inLobby ? "Joining Lobby..." : "Creating Lobby..."}
+        </div>
+        <div className="flex mt-2">
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: [0, 1, 0] }}
+            transition={{
+              repeat: Infinity,
+              duration: 1,
+              delay: 0,
+              ease: "easeInOut"
+            }}
+            className="w-3 h-3 rounded-full bg-blue-400 mx-1"
+          />
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: [0, 1, 0] }}
+            transition={{
+              repeat: Infinity,
+              duration: 1,
+              delay: 0.2,
+              ease: "easeInOut"
+            }}
+            className="w-3 h-3 rounded-full bg-blue-400 mx-1"
+          />
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: [0, 1, 0] }}
+            transition={{
+              repeat: Infinity,
+              duration: 1,
+              delay: 0.4,
+              ease: "easeInOut"
+            }}
+            className="w-3 h-3 rounded-full bg-blue-400 mx-1"
+          />
+        </div>
+      </motion.div>
+    </motion.div>
+  )}
+</AnimatePresence>
 
         {/* Popup */}
         <AnimatePresence>
