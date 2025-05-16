@@ -27,6 +27,7 @@ import {
   faChevronUp,
   faTrophy,
   faShieldAlt,
+  faAdjust,
   faCoins
 } from '@fortawesome/free-solid-svg-icons';
 import {
