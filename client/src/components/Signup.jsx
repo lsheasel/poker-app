@@ -127,7 +127,7 @@ const isBlockedUsername = (name) => {
         setPopup({ open: true, message: "Account created successfully!\nA email with a confirmation link has been sent to your email address.", type: "success" });
         // Wait a bit before redirecting to show success message
         setTimeout(() => {
-          navigate("/profile");
+          navigate("/");
         }, 1500);
       } else {
         setError(result.error.message);
