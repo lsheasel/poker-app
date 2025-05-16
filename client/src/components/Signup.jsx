@@ -256,13 +256,6 @@ const isBlockedUsername = (name) => {
                     
                     <div className={`absolute md:relative top-full left-0 w-full md:w-auto p-4 md:p-0 bg-gray-900 md:bg-transparent transition-all duration-300 transform ${navbarOpen ? 'translate-y-0 opacity-100' : '-translate-y-2 opacity-0 pointer-events-none'} md:translate-y-0 md:opacity-100 md:pointer-events-auto z-20`}>
                       <div className="flex flex-col md:flex-row items-center gap-6">
-                        <button
-                  onClick={handleMultiplayer}
-                  className='flex items-center gap-2 text-white hover:text-blue-300 transition'
-                  >
-                <FontAwesomeIcon icon={faGamepad} className="text-blue-400" />
-                Multiplayer
-              </button>
                         <div className="flex gap-3">
                           <a
             href="https://discord.gg/tCCdfJyZEp"

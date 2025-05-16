@@ -117,7 +117,7 @@ function generateLobbyCode(length = 6) {
   return code;
 }
 
-const Lobby = ({ onStartGame }) => {
+const Multiplayer = ({ onStartGame }) => {
   const [lobbyName, setLobbyName] = useState("");
   const [playerName, setPlayerName] = useState("Player Name");
   const [lobbyPlayers, setLobbyPlayers] = useState([]);
@@ -947,4 +947,4 @@ useEffect(() => {
   );
 };
 
-export default Lobby;
+export default Multiplayer;

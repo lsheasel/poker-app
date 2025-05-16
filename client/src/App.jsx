@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Lobby from './components/Lobby';
+import Multi from './components/Multiplayer';
 import PokerGame from './components/PokerGame';
 import socket from './socket';
 import { supabase } from './supabaseClient';
@@ -127,28 +128,32 @@ const App = () => {
   return (
     <div>
       {!gameState.isPlaying ? (
-        <Lobby onStartGame={handleGameStart} />
-      ) : (
-        <PokerGame 
-          players={gamePlayers}
-          avatar_url={gameState.avatar_url}
-          lobbyName={gameState.lobbyName}
-          playerName={gameState.playerName}
-          playerId={gameState.playerId}
-          isHost={gameState.isHost}
-          playerHand={gameState.playerHand}
-          communityCards={gameState.communityCards}
-          pot={gameState.pot}
-          playerMoney={gameState.playerMoney}
-          gameStarted={gameState.gameStarted}
-          playerTurn={gameState.playerTurn}
-          currentPlayerId={currentPlayerId}
-          myPlayerId={gameState.playerId}
-          onBet={handleBet}
-          onCall={handleCall}
-          onFold={handleFold}
-        />
-      )}
+  <>
+    <Lobby onStartGame={handleGameStart} />
+    
+  </>
+) : (
+  <PokerGame 
+    players={gamePlayers}
+    avatar_url={gameState.avatar_url}
+    lobbyName={gameState.lobbyName}
+    playerName={gameState.playerName}
+    playerId={gameState.playerId}
+    isHost={gameState.isHost}
+    playerHand={gameState.playerHand}
+    communityCards={gameState.communityCards}
+    pot={gameState.pot}
+    playerMoney={gameState.playerMoney}
+    gameStarted={gameState.gameStarted}
+    playerTurn={gameState.playerTurn}
+    currentPlayerId={currentPlayerId}
+    myPlayerId={gameState.playerId}
+    onBet={handleBet}
+    onCall={handleCall}
+    onFold={handleFold}
+  />
+)}
+
     </div>
   );
 };

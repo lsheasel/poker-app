@@ -13,7 +13,6 @@ export const router = createBrowserRouter([
   { path: "/login", element: <Signin /> },
   { path: "/forgot-password", element: <Recovery /> },
   { path: "/update-password", element: <UpdatePassword /> },
-  { path: "/play", element: <Multiplayer /> },
   {
     path: "/profile",
     element: (
