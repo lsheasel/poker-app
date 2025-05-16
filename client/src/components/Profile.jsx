@@ -489,7 +489,7 @@ import {
     <div className="bg-gray-700 bg-opacity-60 backdrop-blur-lg rounded-xl p-6 border border-gray-600">
       <h3 className="text-xl font-bold text-white mb-4">Quick Actions</h3>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Link to="/play" className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 text-white font-bold py-3 px-6 rounded-xl transition duration-300 shadow-lg text-center transform hover:scale-105">
+        <Link to="/" className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 text-white font-bold py-3 px-6 rounded-xl transition duration-300 shadow-lg text-center transform hover:scale-105">
           Start New Game
         </Link>
         <div className="relative">

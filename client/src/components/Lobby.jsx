@@ -527,7 +527,7 @@ useEffect(() => {
             <div className="bg-red-500 bg-opacity-20 border border-red-500 rounded-lg p-2 text-center">
               <p className="text-sm text-red-200">
                 This is a Beta! It may contain bugs and errors.
-                Please report any issues to our Discord Serveror to this Email: info@poker4fun.xyz
+                Please report any issues to our Discord Server or to this Email: info@poker4fun.xyz
               </p>
             </div>
           </motion.div>
