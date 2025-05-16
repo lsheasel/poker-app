@@ -2,12 +2,19 @@ import React, { useState, useEffect } from 'react';
 import Lobby from './components/Lobby';
 import PokerGame from './components/PokerGame';
 import socket from './socket';
+import { supabase } from './supabaseClient';
+import ProfileButton from './components/Profile';
+import { UserAuth } from "./context/AuthContext";
+
+
 
 const App = () => {
+  const { user } = UserAuth();
   const [gameState, setGameState] = useState({
     isPlaying: false,
     lobbyName: '',
     playerName: '',
+    avatar_url: '',
     playerId: '',
     isHost: false,
     playerHand: [],
@@ -23,7 +30,6 @@ const App = () => {
 
   useEffect(() => {
     const handleDealCards = (data) => {
-      console.log("App.jsx: DealCards received:", data);
       if (data.hand && Array.isArray(data.hand)) {
         setGameState(prev => ({
           ...prev,
@@ -35,7 +41,6 @@ const App = () => {
     };
 
     const handleUpdatePot = (data) => {
-      console.log("App.jsx: UpdatePot received:", data);
       setGameState(prev => ({
         ...prev,
         pot: data.pot
@@ -72,6 +77,12 @@ const App = () => {
     });
     return () => socket.off("currentPlayer");
   }, []);
+  useEffect(() => {
+    socket.on("avatar_url", ({ avatar_url }) => {
+      setCurrentPlayerId(avatar_url);
+    });
+    return () => socket.off("avatar_url");
+  }, []);
 
   useEffect(() => {
     socket.on("communityCards", ({ cards }) => {
@@ -94,6 +105,7 @@ const App = () => {
       isPlaying: true,
       lobbyName: gameInfo.lobbyName,
       playerName: gameInfo.playerName,
+      avatar_url: gameInfo.avatar_url,
       playerId: socket.id, // <--- eigene Socket-ID!
       isHost: gameInfo.isHost
     }));
@@ -119,6 +131,7 @@ const App = () => {
       ) : (
         <PokerGame 
           players={gamePlayers}
+          avatar_url={gameState.avatar_url}
           lobbyName={gameState.lobbyName}
           playerName={gameState.playerName}
           playerId={gameState.playerId}
@@ -136,7 +149,6 @@ const App = () => {
           onFold={handleFold}
         />
       )}
-      {console.log("currentPlayerId:", currentPlayerId, "myPlayerId:", gameState.playerId)}
     </div>
   );
 };

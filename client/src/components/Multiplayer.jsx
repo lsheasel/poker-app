@@ -36,8 +36,6 @@ import blockedData from '../assets/blocked_names.json';
 
 let lobbyAudio = null;
 
-
-
 function playLobbyMusic() {
   if (lobbyAudio) {
     lobbyAudio.pause();
@@ -145,6 +143,7 @@ const Lobby = ({ onStartGame }) => {
 
 
 
+  
 useEffect(() => {
   const checkName = async () => {
     const { data, error } = await supabase.auth.getUser();
@@ -364,6 +363,15 @@ useEffect(() => {
       setIsVisible(true); // Ersetze '/login' mit deiner Login-Route
     }
   };
+  useEffect(() => {
+  const checkUser = async () => {
+    const { data, error } = await supabase.auth.getUser();
+    if (!data?.user) {
+      navigate('/');
+    }
+  };
+  checkUser();
+}, [navigate]);
 
   const suitSymbols = ["♠", "♥", "♦", "♣"];
 
@@ -534,7 +542,7 @@ useEffect(() => {
             <div className="bg-red-500 bg-opacity-20 border border-red-500 rounded-lg p-2 text-center">
               <p className="text-sm text-red-200">
                 This is a Beta! It may contain bugs and errors.
-                Please report any issues to our Discord Serveror to this Email: info@poker4fun.xyz
+                Please report any issues to our Discord Server or to this Email: info@poker4fun.xyz
               </p>
             </div>
           </motion.div>

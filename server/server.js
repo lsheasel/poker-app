@@ -32,11 +32,9 @@ const io = new Server(server, {
 let lobbies = {};
 
 io.on("connection", (socket) => {
-  console.log("Player connected:", socket.id);
   let currentLobby = null;
 
-  socket.on("createLobby", (lobbyName, playerName) => {
-    console.log(`Creating lobby ${lobbyName} for ${playerName}`);
+  socket.on("createLobby", (lobbyName, playerName, avatar_url) => {
     
     if (lobbies[lobbyName]) {
       socket.emit("error", "Lobby already exists");
@@ -46,7 +44,7 @@ io.on("connection", (socket) => {
     currentLobby = lobbyName;
     lobbies[lobbyName] = {
       host: socket.id,
-      players: [{ id: socket.id, name: playerName, chips: 1000, hand: [] }], // Added hand array for each player
+      players: [{ id: socket.id, name: playerName, chips: 1000, hand: [], avatar_url: avatar_url}], // Added hand array for each player
       gameStarted: false,
       deck: [],
       communityCards: [],
@@ -65,26 +63,23 @@ io.on("connection", (socket) => {
     io.to(lobbyName).emit("updatePlayers", lobbies[lobbyName].players);
   });
 
-  socket.on("joinLobby", (lobbyName, playerName) => {
-    console.log(`${playerName} joining lobby ${lobbyName}`);
+  socket.on("joinLobby", (lobbyName, playerName, avatar_url) => {
     
     if (!lobbies[lobbyName]) {
       socket.emit("error", "Lobby doesn't exist");
       return;
     }
 
-    lobbies[lobbyName].players.push({ id: socket.id, name: playerName, chips: 1000, hand: [] }); // Added hand array for each player
+    lobbies[lobbyName].players.push({ id: socket.id, name: playerName, chips: 1000, hand: [], avatar_url: avatar_url}); // Added hand array for each player
     socket.join(lobbyName);
     io.to(lobbyName).emit("playerJoined", lobbies[lobbyName].players);
     io.to(lobbyName).emit("updatePlayers", lobbies[lobbyName].players);
   });
 
   socket.on("startGame", (lobbyName) => {
-    console.log(`Starting game in lobby ${lobbyName}`);
     const lobby = lobbies[lobbyName];
     
     if (!lobby || lobby.gameStarted) {
-      console.log("Game cannot start:", !lobby ? "Lobby not found" : "Game already started");
       return;
     }
     
@@ -124,22 +119,18 @@ io.on("connection", (socket) => {
   });
 
   socket.on("bet", ({ lobbyName, amount }) => {
-    console.log(`[BET] Spieler ${socket.id} setzt ${amount} in Lobby ${lobbyName}, State: ${lobbies[lobbyName]?.gameState}`);
 
     const lobby = lobbies[lobbyName];
     if (!lobby || !lobby.gameStarted || lobby.showdownInProgress) {
-      console.log(`[BET] Lobby ${lobbyName} nicht gefunden, Spiel nicht gestartet, oder bereits im Showdown`);
       return;
     }
 
     const player = lobby.players.find(p => p.id === socket.id);
     if (!player) {
-      console.log(`[BET] Spieler ${socket.id} nicht in Lobby gefunden!`);
       return;
     }
 
     if (player.chips < amount) {
-      console.log(`[BET] Spieler ${socket.id} hat nicht genug Chips! (${player.chips} < ${amount})`);
       socket.emit("error", "Nicht genug Chips!");
       return;
     }
@@ -157,7 +148,6 @@ io.on("connection", (socket) => {
     if (lobby.actionCount >= lobby.players.length) {
       lobby.actionCount = 0;
       
-      console.log(`[BET] Alle Spieler haben gesetzt, aktueller Zustand: ${lobby.gameState}`);
       
       // Übergang zum nächsten Spielzustand
       advanceGameState(lobby, lobbyName);
@@ -169,17 +159,14 @@ io.on("connection", (socket) => {
   });
 
   socket.on("call", ({ lobbyName }) => {
-    console.log(`[CALL] Spieler ${socket.id} callt in Lobby ${lobbyName}, State: ${lobbies[lobbyName]?.gameState}`);
     
     const lobby = lobbies[lobbyName];
     if (!lobby || !lobby.gameStarted || lobby.showdownInProgress) {
-      console.log(`[CALL] Lobby ${lobbyName} nicht gefunden, Spiel nicht gestartet, oder bereits im Showdown`);
       return;
     }
 
     const player = lobby.players.find(p => p.id === socket.id);
     if (!player) {
-      console.log(`[CALL] Spieler ${socket.id} nicht in Lobby gefunden!`);
       return;
     }
 
@@ -202,7 +189,6 @@ io.on("connection", (socket) => {
     if (lobby.actionCount >= lobby.players.length) {
       lobby.actionCount = 0;
       
-      console.log(`[CALL] Alle Spieler haben gecallt, aktueller Zustand: ${lobby.gameState}`);
       
       // Übergang zum nächsten Spielzustand
       advanceGameState(lobby, lobbyName);
@@ -213,17 +199,14 @@ io.on("connection", (socket) => {
     io.to(lobbyName).emit("currentPlayer", { playerId: currentPlayerId });
   });
   socket.on("fold", ({ lobbyName }) => {
-    console.log(`[FOLD] Spieler ${socket.id} foldet in Lobby ${lobbyName}`);
     
     const lobby = lobbies[lobbyName];
     if (!lobby || !lobby.gameStarted || lobby.showdownInProgress) {
-      console.log(`[FOLD] Lobby ${lobbyName} nicht gefunden, Spiel nicht gestartet, oder bereits im Showdown`);
       return;
     }
   
     const playerIndex = lobby.players.findIndex(p => p.id === socket.id);
     if (playerIndex === -1) {
-      console.log(`[FOLD] Spieler ${socket.id} nicht in Lobby gefunden!`);
       return;
     }
   
@@ -237,7 +220,6 @@ io.on("connection", (socket) => {
     // Check if only one active player remains
     const activePlayers = lobby.players.filter(p => !p.folded);
     if (activePlayers.length <= 1) {
-      console.log(`[FOLD] Nur ein aktiver Spieler übrig, Runde beendet!`);
       const winner = activePlayers[0];
       winner.chips += lobby.pot;
       io.to(lobbyName).emit("roundEnded", { winnerId: winner.id, pot: lobby.pot });
@@ -262,7 +244,6 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
-    console.log("Player disconnected:", socket.id);
     if (currentLobby) {
       const lobby = lobbies[currentLobby];
       if (lobby) {
@@ -280,7 +261,6 @@ io.on("connection", (socket) => {
 
 // Korrigierte Funktion zum Fortschreiten des Spielzustands (5 Runden)
 function advanceGameState(lobby, lobbyName) {
-  console.log(`[ADVANCE] Fortschreiten vom Zustand ${lobby.gameState}`);
   const currentBet = lobbies[lobbyName]?.currentBet || 0;
   
   switch (lobby.gameState) {
@@ -310,7 +290,6 @@ function advanceGameState(lobby, lobbyName) {
       lobby.gameState = "showdown";
       lobby.showdownInProgress = true;
       
-      console.log(`[SHOWDOWN] Spiel beendet, Gewinner wird ermittelt`);
       const winner = determineWinner(lobby);
       winner.chips += lobby.pot;
       
@@ -331,7 +310,6 @@ function dealCommunityCards(lobby, lobbyName, count) {
   if (!lobby.communityCards) lobby.communityCards = [];
   lobby.communityCards.push(...newCards);
   
-  console.log(`[DEAL] ${count} Gemeinschaftskarten ausgeteilt, jetzt insgesamt ${lobby.communityCards.length}`);
   io.to(lobbyName).emit("communityCards", { cards: lobby.communityCards });
 }
 
@@ -370,7 +348,6 @@ function startNewRound(lobbyName) {
   const lobby = lobbies[lobbyName];
   if (!lobby) return;
 
-  console.log(`[NEW ROUND] Starte neue Runde in Lobby ${lobbyName}`);
 
   lobby.deck = generateDeck();
   lobby.communityCards = [];
@@ -639,7 +616,6 @@ const determineWinner = (lobby) => {
     const allCards = [...(player.hand || []), ...communityCards];
     
     if (allCards.length < 5) {
-      console.log(`[WINNER] Nicht genug Karten für Spieler ${player.id}!`);
       return { player, handRank: { rank: -1 } };
     }
     

@@ -1,6 +1,7 @@
 import { io } from "socket.io-client";
+const SocketUrl = import.meta.env.VITE_SOCKET_URL;
 
-const socket = io("https://poker-app-backend.onrender.com", {
+const socket = io(SocketUrl, {
   transports: ['websocket'],
   reconnection: true,
   reconnectionAttempts: 5,
@@ -8,16 +9,5 @@ const socket = io("https://poker-app-backend.onrender.com", {
   autoConnect: true
 });
 
-socket.on("connect", () => {
-  console.log("Socket connected with ID:", socket.id);
-});
-
-socket.on("connect_error", (error) => {
-  console.error("Socket connection error:", error);
-});
-
-socket.on("dealCards", (data) => {
-  console.log("socket.js: dealCards global listener:", data);
-});
 
 export default socket;

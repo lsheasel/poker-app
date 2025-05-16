@@ -1,26 +1,33 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
-import './PokerGame.css';
+import React, { useState, useEffect, useRef, use } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 
 import socket from '../socket';
 import { stopLobbyMusic } from './Lobby';
-
+import Avatar from './Avatar'
+import { supabase } from "../supabaseClient";
+import { UserAuth } from "../context/AuthContext";
 // Font Awesome
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import {
-  faVolumeUp,
-  faVolumeMute,
-  faQuestionCircle,
-  faCopy,
-  faCrown,
+import { 
+  faBars, 
+  faTimes, 
+  faQuestionCircle, 
+  faVolumeUp, 
+  faVolumeMute, 
+  faCopy, 
+  faCrown, 
   faUser,
-  faTimes,
-  faInfoCircle,
-  faClosedCaptioning,
-  faChevronUp,
+  faGamepad,
+  faUsers,
+  faFire,
+  faGem,
+  faRandom,
+  faChevronRight,
   faChevronDown,
-  faAdjust,
-  faBars
+  faChevronUp,
+  faTrophy,
+  faShieldAlt,
+  faCoins
 } from '@fortawesome/free-solid-svg-icons';
 import {
   faDiscord,
@@ -38,7 +45,7 @@ let audioEnabled = true;
 
 function playTableMusic() {
   if (!audioEnabled) return;
-  
+
   if (tableAudio) {
     tableAudio.pause();
     tableAudio.currentTime = 0;
@@ -46,7 +53,6 @@ function playTableMusic() {
   tableAudio = new window.Audio("/table.mp3");
   tableAudio.volume = 0.1;
   tableAudio.loop = true;
-  tableAudio.play().catch(e => console.log("Audio playback prevented:", e));
 }
 
 function stopTableMusic() {
@@ -70,7 +76,7 @@ function toggleTableMusic() {
 // Sound effects
 const playSoundEffect = (type) => {
   if (!audioEnabled) return;
-  
+
   const effects = {
     bet: "/sounds/chip.mp3",
     win: "/sounds/win.mp3",
@@ -79,10 +85,9 @@ const playSoundEffect = (type) => {
     error: "/sounds/error.mp3",
     buttonClick: "/sounds/click.mp3"
   };
-  
+
   const sound = new window.Audio(effects[type] || effects.buttonClick);
   sound.volume = 0.2;
-  sound.play().catch(e => console.log("Sound effect playback prevented:", e));
 };
 
 // Card utilities
@@ -102,19 +107,19 @@ const getSuitSymbol = (suit) => {
 // Enhanced Card component with Framer Motion
 const Card = ({ card, index, delay = 0, type = 'community' }) => {
   const initialY = type === 'player' ? 100 : -100;
-  
+
   // Play card deal sound
   useEffect(() => {
     if (delay === 0) {
       playSoundEffect('deal');
     }
   }, []);
-  
+
   return (
-    <motion.div 
+    <motion.div
       initial={{ y: initialY, opacity: 0, rotateY: 180 }}
       animate={{ y: 0, opacity: 1, rotateY: 0 }}
-      transition={{ 
+      transition={{
         delay: delay * 0.15,
         duration: 0.5,
         type: "spring",
@@ -144,10 +149,10 @@ const Card = ({ card, index, delay = 0, type = 'community' }) => {
 // Chip component
 const Chip = ({ amount, delay = 0 }) => {
   return (
-    <motion.div 
+    <motion.div
       initial={{ y: -20, opacity: 0, scale: 0.8 }}
       animate={{ y: 0, opacity: 1, scale: 1 }}
-      transition={{ 
+      transition={{
         delay: delay * 0.1,
         duration: 0.4,
         type: "spring",
@@ -166,15 +171,19 @@ const Chip = ({ amount, delay = 0 }) => {
   );
 };
 
+
+
 // Player Avatar component
-const PlayerAvatar = ({ player, isCurrentPlayer, position, delay, isActive, lastAction }) => {
+const PlayerAvatar = ({ player, isCurrentPlayer, position, delay, isActive, lastAction, avatar_url }) => {
+
+
   return (
     <motion.div
       initial={{ scale: 0.7, opacity: 0 }}
       animate={{ scale: 1, opacity: 1 }}
-      transition={{ 
-        delay: delay, 
-        duration: 0.5, 
+      transition={{
+        delay: delay,
+        duration: 0.5,
         type: "spring",
         stiffness: 120,
         damping: 10
@@ -182,9 +191,15 @@ const PlayerAvatar = ({ player, isCurrentPlayer, position, delay, isActive, last
       className="absolute flex flex-col items-center z-20"
       style={position}
     >
+       <div className="flex items-center relative">
+      {/* Avatar Circle */}
       <motion.div 
         animate={isCurrentPlayer ? { 
-          boxShadow: ['0 0 0px rgba(255,215,0,0)', '0 0 15px rgba(255,215,0,0.7)', '0 0 0px rgba(255,215,0,0)'] 
+          boxShadow: [
+            '0 0 0px rgba(255,215,0,0)', 
+            '0 0 15px rgba(255,215,0,0.7)', 
+            '0 0 0px rgba(255,215,0,0)'
+          ]
         } : {}}
         transition={{
           duration: 1.5,
@@ -192,25 +207,35 @@ const PlayerAvatar = ({ player, isCurrentPlayer, position, delay, isActive, last
           repeatType: "loop"
         }}
         className={`
-          rounded-full bg-gray-800 border-4 
+          rounded-full bg-gray-700 border-4 
           ${isCurrentPlayer ? "border-yellow-400" : isActive ? "border-green-400" : "border-gray-600"} 
-          md:w-24 md:h-16 w-20 h-14 flex flex-col items-center justify-center text-white text-base font-bold 
-          transition-all duration-300 relative
+          w-16 h-16 flex items-center justify-center relative
+          text-white font-bold transition-all duration-300
         `}
-        aria-label={`Player ${player.name} with ${player.chips} chips${isCurrentPlayer ? ', current turn' : ''}`}
       >
-        <div className="text-center">
-          {player.name || "?"}
-        </div>
+        <Avatar
+          url={player.avatar_url}
+          size={58}
+        />
         
-        {/* Last action indicator */}
+        {/* Last Action */}
         {lastAction && (
-          <div className="absolute -bottom-6 left-0 right-0 mx-auto bg-gray-800 text-xs text-center py-1 px-2 rounded-md text-yellow-300">
-            {lastAction}
+          <div className="absolute -bottom-4 left-0 w-16 text-center">
+            <div className="mx-auto bg-gray-700 text-xs py-0.5 px-2 rounded text-white">
+              {lastAction}
+            </div>
           </div>
         )}
       </motion.div>
-      <div className="mt-1 text-white text-sm font-bold">${player.chips ?? 0}</div>
+
+      {/* Player Info - Connected Gray Box */}
+      <div className="h-8 rounded-r-full bg-gray-700 flex flex-col justify-center pl-6 pr-4 -ml-5 text-white shadow-md">
+        <span className="text-xs font-medium">{player.name}</span>
+        <span className="text-xs font-medium">{player.chips}</span>
+      </div>
+    </div>
+
+
     </motion.div>
   );
 };
@@ -218,85 +243,116 @@ const PlayerAvatar = ({ player, isCurrentPlayer, position, delay, isActive, last
 // Navigation Bar Component
 const Navbar = ({ lobbyName, audioEnabled, onToggleAudio, onShowHelp }) => {
   const [showLoginTooltip, setShowLoginTooltip] = useState(false);
+  const [navbarOpen, setNavbarOpen] = useState(false);
+  const [avatar_url, setAvatarUrl] = useState(null);
+  const navigate = useNavigate();
+  const handleMultiplayer = async () => {
+    // Überprüfen, ob der Benutzer authentifiziert ist
+    const { data, error } = await supabase.auth.getUser();
+
+    if (data?.user) {
+      // Wenn der Benutzer eingeloggt ist, leite ihn zu Discord weiter
+      navigate("/play"); // Ersetze '/profile' mit deiner gewünschten Route
+    } else {
+      // Wenn der Benutzer nicht eingeloggt ist, leite ihn zur Login-Seite weiter
+      navigate('/'); // Ersetze '/login' mit deiner Login-Route
+    }
+  };
+  const handleProfile = async () => {
+    // Überprüfen, ob der Benutzer authentifiziert ist
+    const { data, error } = await supabase.auth.getUser();
+
+    if (data?.user) {
+      // Wenn der Benutzer eingeloggt ist, leite ihn zu Discord weiter
+      navigate("/profile"); // Ersetze '/profile' mit deiner gewünschten Route
+    } else {
+      // Wenn der Benutzer nicht eingeloggt ist, leite ihn zur Login-Seite weiter
+      navigate('/login'); // Ersetze '/login' mit deiner Login-Route
+    }
+  };
+  const { session, signOut } = UserAuth();
+  useEffect(() => {
+  // Wenn der Benutzer eingeloggt ist, holen wir das Avatar-Bild aus der session
+  if (session?.user?.user_metadata?.avatar_url) {
+    setAvatarUrl(session.user.user_metadata.avatar_url);
+  }
+}, [session]);
   return (
-    <div className="w-full bg-gray-900 bg-opacity-80 backdrop-blur-lg fixed top-0 left-0 z-50 px-3 md:px-6 py-2 md:py-4">
-      <div className="flex items-center justify-between container mx-auto">
-        <div className="flex items-center gap-2">
-          <div className="flex items-center">
-            <motion.div
-              initial={{ rotate: -5 }}
-              animate={{ rotate: 5 }}
-              transition={{ 
-                duration: 1.5, 
-                repeat: Infinity, 
-                repeatType: 'reverse' 
-              }}
-              className="text-2xl md:text-3xl mr-2 text-white font-bold"
-            >
-              ♠
-            </motion.div>
-            <a href="https://poker4fun.xyz" className="text-white font-bold text-xl md:text-2xl">Poker4Fun</a>
-          </div>
-        </div>
-        
-        <div className="text-center hidden md:block">
-          <div className="text-yellow-300 text-sm font-semibold">
-            Room: {lobbyName || "Poker Table"}
-          </div>
-        </div>
-        
-        <div className="flex items-center gap-2 md:gap-4">
-          <button
-            onClick={onToggleAudio}
-            className="bg-gray-700 hover:bg-gray-600 text-white p-2 rounded-full shadow-lg transition-all hover:scale-110"
-            aria-label={audioEnabled ? "Mute sound" : "Enable sound"}
-          >
-            <FontAwesomeIcon icon={audioEnabled ? faVolumeUp : faVolumeMute} />
-          </button>
-          
-          <button
-            onClick={onShowHelp}
-            className="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-full shadow-lg transition-all hover:scale-110"
-            aria-label="Show help"
-          >
-            <FontAwesomeIcon icon={faQuestionCircle} />
-          </button>
-          
-          <a
-            href="https://discord.gg/tCCdfJyZEp"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="bg-indigo-600 hover:bg-indigo-700 text-white p-2 rounded-full shadow-lg transition-all hover:scale-110"
-            aria-label="Discord"
-          >
-            <FontAwesomeIcon icon={faDiscord} />
-          </a>
-          
-          <div className="relative">
-            <button 
-              className="bg-gray-600 text-gray-400 p-2 rounded-full shadow-lg cursor-not-allowed opacity-60"
-              aria-label="Login (Coming Soon)"
-              onMouseEnter={() => setShowLoginTooltip(true)}
-              onMouseLeave={() => setShowLoginTooltip(false)}
-            >
-              <FontAwesomeIcon icon={faUser} />
-            </button>
-            {showLoginTooltip && (
-              <div className="absolute right-0 mt-2 w-32 bg-gray-800 rounded-md shadow-lg p-2 text-center text-sm text-gray-200 z-50">
-                Coming Soon
+    <nav className="w-full bg-gray-900 bg-opacity-80 backdrop-blur-lg fixed top-0 left-0 z-50 px-6 py-4">
+            <div className="flex items-center justify-between container mx-auto">
+              <div className="flex items-center gap-2">
+                <div className="flex items-center">
+                  <motion.div
+                            initial={{ rotate: -5 }}
+                            animate={{ rotate: 5 }}
+                            transition={{ 
+                              duration: 1.5, 
+                              repeat: Infinity, 
+                              repeatType: 'reverse' 
+                            }}
+                            className="text-3xl mr-2 text-white font-bold"
+                          >
+                            ♠
+                          </motion.div>
+                  <a href="/" className="text-white font-bold text-2xl">Poker4Fun</a>
+                </div>
               </div>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
+              
+              <div className="md:hidden">
+                <button 
+                  onClick={() => setNavbarOpen(!navbarOpen)} 
+                  className="text-white text-2xl focus:outline-none"
+                  aria-label="Toggle menu"
+                >
+                  <FontAwesomeIcon icon={navbarOpen ? faTimes : faBars} />
+                </button>
+              </div>
+              
+              <div className={`absolute md:relative top-full left-0 w-full md:w-auto p-4 md:p-0 bg-gray-900 md:bg-transparent transition-all duration-300 transform ${navbarOpen ? 'translate-y-0 opacity-100' : '-translate-y-2 opacity-0 pointer-events-none'} md:translate-y-0 md:opacity-100 md:pointer-events-auto z-20`}>
+                <div className="flex flex-col md:flex-row items-center gap-6">
+                  <button
+                      onClick={handleMultiplayer}
+                      className='flex items-center gap-2 text-white hover:text-blue-300 transition'
+                      >
+                    <FontAwesomeIcon icon={faGamepad} className="text-blue-400" />
+                    Multiplayer
+                  </button>
+                  <div className="flex gap-3">
+                    <a
+      href="https://discord.gg/tCCdfJyZEp"
+      target="_blank"
+      rel="noopener noreferrer"
+      className="w-[38px] h-[38px] bg-indigo-600 hover:bg-indigo-700 text-white rounded-full shadow-lg transition-all hover:scale-110 flex items-center justify-center"
+      aria-label="Discord"
+    >
+      <FontAwesomeIcon icon={faDiscord} className="w-[26px] h-[26px]" />
+    </a>
+    
+                    
+                    <div className="relative">
+                      <button 
+                        className="bg-gray-700 rounded-full border border-gray-500 p-0.5 shadow-sm"
+                        onClick={handleProfile}
+                      >
+                        <Avatar
+                          url={avatar_url} // Sollte hier die URL vom User-Avatar übergeben werden
+                          size={32}
+                          isEditable={false}
+                        />                    
+                      </button>                                
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </nav>
   );
 };
 
 // Settings modal
 const SettingsModal = ({ show, onClose, audioEnabled, onToggleAudio, contrastMode, onToggleContrast }) => {
   if (!show) return null;
-  
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -322,7 +378,7 @@ const SettingsModal = ({ show, onClose, audioEnabled, onToggleAudio, contrastMod
             <FontAwesomeIcon icon={faTimes} />
           </button>
         </div>
-        
+
         <div className="space-y-4">
           <div className="flex items-center justify-between p-3 bg-gray-700 rounded-lg">
             <div className="flex items-center gap-3">
@@ -337,7 +393,7 @@ const SettingsModal = ({ show, onClose, audioEnabled, onToggleAudio, contrastMod
               <div className={`absolute w-5 h-5 bg-white rounded-full top-0.5 transition-all ${audioEnabled ? 'right-0.5' : 'left-0.5'}`}></div>
             </button>
           </div>
-          
+
           <div className="flex items-center justify-between p-3 bg-gray-700 rounded-lg">
             <div className="flex items-center gap-3">
               <FontAwesomeIcon icon={faAdjust} className="text-white" />
@@ -351,7 +407,7 @@ const SettingsModal = ({ show, onClose, audioEnabled, onToggleAudio, contrastMod
               <div className={`absolute w-5 h-5 bg-white rounded-full top-0.5 transition-all ${contrastMode ? 'right-0.5' : 'left-0.5'}`}></div>
             </button>
           </div>
-          
+
           <div className="flex items-center justify-between p-3 bg-gray-700 rounded-lg">
             <div className="flex items-center gap-3">
               <FontAwesomeIcon icon={faClosedCaptioning} className="text-white" />
@@ -373,9 +429,9 @@ const SettingsModal = ({ show, onClose, audioEnabled, onToggleAudio, contrastMod
 // Help modal with poker rules
 const HelpModal = ({ show, onClose }) => {
   const [activeTab, setActiveTab] = useState('rules');
-  
+
   if (!show) return null;
-  
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -401,7 +457,7 @@ const HelpModal = ({ show, onClose }) => {
             <FontAwesomeIcon icon={faTimes} />
           </button>
         </div>
-        
+
         <div className="flex space-x-2 mb-4">
           <button
             className={`px-4 py-2 rounded-lg ${activeTab === 'rules' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'}`}
@@ -422,13 +478,13 @@ const HelpModal = ({ show, onClose }) => {
             Controls
           </button>
         </div>
-        
+
         <div className="text-gray-200 space-y-4">
           {activeTab === 'rules' && (
             <>
               <h4 className="text-lg font-bold text-yellow-300">How to Play Texas Hold'em</h4>
               <p>Texas Hold'em is played with a standard 52-card deck. Each player receives two private cards, and five community cards are dealt face up.</p>
-              
+
               <h5 className="font-bold text-white mt-3">Game Flow:</h5>
               <ol className="list-decimal pl-5 space-y-2">
                 <li><strong>Blinds:</strong> The game begins with two players posting blinds (forced bets).</li>
@@ -438,7 +494,7 @@ const HelpModal = ({ show, onClose }) => {
                 <li><strong>River:</strong> A fifth and final community card is dealt, followed by a final betting round.</li>
                 <li><strong>Showdown:</strong> If multiple players remain, they reveal their cards and the best hand wins.</li>
               </ol>
-              
+
               <h5 className="font-bold text-white mt-3">Betting Options:</h5>
               <ul className="list-disc pl-5 space-y-2">
                 <li><strong>Check:</strong> Pass the action to the next player (only if no bet has been made).</li>
@@ -448,58 +504,58 @@ const HelpModal = ({ show, onClose }) => {
               </ul>
             </>
           )}
-          
+
           {activeTab === 'hands' && (
             <div className="space-y-3">
               <h4 className="text-lg font-bold text-yellow-300">Poker Hand Rankings</h4>
               <p>From highest to lowest:</p>
-              
+
               <div className="space-y-2">
                 <div className="bg-gray-700 p-3 rounded-lg">
                   <h5 className="font-bold text-white">Royal Flush</h5>
                   <p className="text-sm">A, K, Q, J, 10 all of the same suit</p>
                 </div>
-                
+
                 <div className="bg-gray-700 p-3 rounded-lg">
                   <h5 className="font-bold text-white">Straight Flush</h5>
                   <p className="text-sm">Five cards in sequence, all of the same suit</p>
                 </div>
-                
+
                 <div className="bg-gray-700 p-3 rounded-lg">
                   <h5 className="font-bold text-white">Four of a Kind</h5>
                   <p className="text-sm">Four cards of the same rank</p>
                 </div>
-                
+
                 <div className="bg-gray-700 p-3 rounded-lg">
                   <h5 className="font-bold text-white">Full House</h5>
                   <p className="text-sm">Three of a kind plus a pair</p>
                 </div>
-                
+
                 <div className="bg-gray-700 p-3 rounded-lg">
                   <h5 className="font-bold text-white">Flush</h5>
                   <p className="text-sm">Five cards of the same suit, not in sequence</p>
                 </div>
-                
+
                 <div className="bg-gray-700 p-3 rounded-lg">
                   <h5 className="font-bold text-white">Straight</h5>
                   <p className="text-sm">Five cards in sequence, not all same suit</p>
                 </div>
-                
+
                 <div className="bg-gray-700 p-3 rounded-lg">
                   <h5 className="font-bold text-white">Three of a Kind</h5>
                   <p className="text-sm">Three cards of the same rank</p>
                 </div>
-                
+
                 <div className="bg-gray-700 p-3 rounded-lg">
                   <h5 className="font-bold text-white">Two Pair</h5>
                   <p className="text-sm">Two different pairs</p>
                 </div>
-                
+
                 <div className="bg-gray-700 p-3 rounded-lg">
                   <h5 className="font-bold text-white">Pair</h5>
                   <p className="text-sm">Two cards of the same rank</p>
                 </div>
-                
+
                 <div className="bg-gray-700 p-3 rounded-lg">
                   <h5 className="font-bold text-white">High Card</h5>
                   <p className="text-sm">When no other hand applies, highest card wins</p>
@@ -507,27 +563,27 @@ const HelpModal = ({ show, onClose }) => {
               </div>
             </div>
           )}
-          
+
           {activeTab === 'controls' && (
             <>
               <h4 className="text-lg font-bold text-yellow-300">Game Controls</h4>
-              
+
               <div className="space-y-3">
                 <div className="bg-gray-700 p-3 rounded-lg">
                   <h5 className="font-bold text-white">Betting</h5>
                   <p>Enter an amount in the input field and click "Bet" to place a bet.</p>
                 </div>
-                
+
                 <div className="bg-gray-700 p-3 rounded-lg">
                   <h5 className="font-bold text-white">Call</h5>
                   <p>Match the current bet to stay in the hand.</p>
                 </div>
-                
+
                 <div className="bg-gray-700 p-3 rounded-lg">
                   <h5 className="font-bold text-white">Fold</h5>
                   <p>Discard your hand and forfeit the current pot.</p>
                 </div>
-                
+
                 <div className="bg-gray-700 p-3 rounded-lg">
                   <h5 className="font-bold text-white">Settings</h5>
                   <p>Access settings like sound toggles and visual preferences.</p>
@@ -550,9 +606,9 @@ const GameStageIndicator = ({ stage }) => {
     'river': 'River',
     'showdown': 'Showdown'
   };
-  
+
   return (
-    <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-gray-800 bg-opacity-80 px-4 py-2 rounded-full text-white font-bold text-sm border border-yellow-500">
+    <div className="absolute left-1/2 transform -translate-x-1/2 bg-gray-800 bg-opacity-80 px-4 py-2 rounded-full text-white font-bold text-sm border border-yellow-500">
       {stages[stage] || 'Pre-Flop'}
     </div>
   );
@@ -564,16 +620,16 @@ const Toast = ({ message, type, onClose }) => {
     const timer = setTimeout(() => {
       onClose();
     }, 3000);
-    
+
     return () => clearTimeout(timer);
   }, [onClose]);
-  
+
   const bgColor = {
     success: 'bg-green-500',
     error: 'bg-red-500',
     info: 'bg-blue-500',
   }[type] || 'bg-blue-500';
-  
+
   return (
     <motion.div
       initial={{ x: 300, opacity: 0 }}
@@ -622,7 +678,8 @@ const PokerGame = ({
   const [showBetOptions, setShowBetOptions] = useState(false);
   const [lastActions, setLastActions] = useState({});
   const tableRef = useRef(null);
-  
+
+
   const isMyTurn = currentPlayerId === myPlayerId;
 
   // On component mount, show help modal for new users
@@ -652,7 +709,7 @@ const PokerGame = ({
       options.push(Math.max(10, pot));
       // All-in
       options.push(playerMoney);
-      
+
       // Remove duplicates and sort
       const uniqueOptions = [...new Set(options)].sort((a, b) => a - b);
       setBetOptions(uniqueOptions.filter(opt => opt <= playerMoney));
@@ -660,10 +717,10 @@ const PokerGame = ({
   }, [pot, playerMoney]);
 
   // Winning popup state
-  const [winnerPopup, setWinnerPopup] = useState({ 
-    show: false, 
-    name: '', 
-    amount: 0 
+  const [winnerPopup, setWinnerPopup] = useState({
+    show: false,
+    name: '',
+    amount: 0
   });
 
   // Handle round end and winner animation
@@ -677,14 +734,14 @@ const PokerGame = ({
       });
       setConfetti(true);
       playSoundEffect('win');
-      
+
       // Reset animations after showing winner
       setTimeout(() => {
         setWinnerPopup({ show: false, name: '', amount: 0 });
         setConfetti(false);
       }, 3000);
     };
-    
+
     socket.on("roundEnded", handleRoundEnded);
     return () => socket.off("roundEnded", handleRoundEnded);
   }, [players]);
@@ -716,7 +773,7 @@ const PokerGame = ({
   const evaluateHand = (playerHand, communityCards) => {
     const allCards = [...playerHand, ...communityCards];
     if (allCards.length < 5) return "Waiting for cards...";
-    
+
     const values = allCards.map((card) => card.value);
     const suits = allCards.map((card) => card.suit);
 
@@ -740,13 +797,13 @@ const PokerGame = ({
 
     // Convert card values to numbers for straight detection
     const valueMap = {
-      'A': 14, 'K': 13, 'Q': 12, 'J': 11, '10': 10, '9': 9, '8': 8, 
+      'A': 14, 'K': 13, 'Q': 12, 'J': 11, '10': 10, '9': 9, '8': 8,
       '7': 7, '6': 6, '5': 5, '4': 4, '3': 3, '2': 2
     };
-    
+
     const numericValues = values.map(v => valueMap[v] || parseInt(v)).sort((a, b) => a - b);
     const uniqueValues = [...new Set(numericValues)];
-    
+
     // Check for straight
     for (let i = 0; i <= uniqueValues.length - 5; i++) {
       if (
@@ -758,7 +815,7 @@ const PokerGame = ({
         return "Straight";
       }
     }
-    
+
     // Special case: A-5 straight
     if (
       uniqueValues.includes(14) && // Ace
@@ -769,7 +826,7 @@ const PokerGame = ({
     ) {
       return "Straight";
     }
-    
+
     return "High Card";
   };
 
@@ -781,13 +838,13 @@ const PokerGame = ({
       playSoundEffect('error');
       return;
     }
-    
+
     if (betAmount > playerMoney) {
       setInputError("You don't have enough chips");
       playSoundEffect('error');
       return;
     }
-    
+
     setInputError('');
     playSoundEffect('bet');
     onBet?.(betAmount);
@@ -816,7 +873,7 @@ const PokerGame = ({
   // Confetti effect
   const renderConfetti = () => {
     if (!confetti) return null;
-    
+
     return Array.from({ length: 100 }).map((_, i) => {
       const style = {
         left: `${Math.random() * 100}%`,
@@ -824,16 +881,62 @@ const PokerGame = ({
         animationDelay: `${Math.random() * 2}s`,
         backgroundColor: `hsl(${Math.random() * 360}, 70%, 50%)`,
       };
-      
+
       return <div key={i} className="confetti" style={style}></div>;
     });
+  };
+  const suitSymbols = ["♠", "♥", "♦", "♣"];
+
+  const FloatingSymbols = () => {
+    return (
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        {Array(20).fill().map((_, index) => {
+          const randomSymbol = suitSymbols[Math.floor(Math.random() * suitSymbols.length)];
+          const size = Math.random() * 40 + 20;
+          const xPos = Math.random() * 100;
+          const yPos = Math.random() * 100;
+          const duration = Math.random() * 20 + 10;
+          const delay = Math.random() * 5;
+          const opacity = Math.random() * 0.15 + 0.05;
+          
+          return (
+            <motion.div
+              key={index}
+              className={`absolute text-white select-none`}
+              initial={{ 
+                x: `${xPos}vw`, 
+                y: `${yPos}vh`, 
+                opacity: 0,
+                scale: 0.5
+              }}
+              animate={{ 
+                y: [`${yPos}vh`, `${yPos - 30}vh`],
+                rotate: [0, 360],
+                opacity: [0, opacity, opacity, 0],
+                scale: [0.5, 1, 1, 0.5]
+              }}
+              transition={{ 
+                repeat: Infinity, 
+                duration: duration,
+                delay: delay,
+                ease: "easeInOut",
+                times: [0, 0.2, 0.8, 1]
+              }}
+              style={{ fontSize: `${size}px` }}
+            >
+              {randomSymbol}
+            </motion.div>
+          );
+        })}
+      </div>
+    );
   };
 
   // Handle keyboard shortcuts
   useEffect(() => {
     const handleKeyPress = (e) => {
       if (!isMyTurn) return;
-      
+
       switch (e.key.toLowerCase()) {
         case 'c':
           onCall?.();
@@ -851,7 +954,7 @@ const PokerGame = ({
           break;
       }
     };
-    
+
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, [isMyTurn, betInput, onCall, onFold]);
@@ -859,18 +962,32 @@ const PokerGame = ({
   return (
     <div className={`flex flex-col h-screen ${contrastMode ? 'high-contrast' : ''}`}>
       {/* Navbar */}
-      <Navbar 
-        lobbyName={lobbyName} 
-        audioEnabled={audioEnabled} 
-        onToggleAudio={handleToggleAudio} 
-        onShowHelp={() => setShowHelpModal(true)} 
+      <Navbar
+        lobbyName={lobbyName}
+        audioEnabled={audioEnabled}
+        onToggleAudio={handleToggleAudio}
+        onShowHelp={() => setShowHelpModal(true)}
       />
+
+      <FloatingSymbols />
       
+      {/* Fixed background card table texture */}
+      
+
       {/* Game container - takes remaining height */}
-      <div className="flex-1 overflow-hidden bg-gradient-to-br from-[#2d112b] via-[#1a1a2e] to-[#3a1c71] flex flex-col items-center justify-center pt-16">
+      <div className="min-h-screen w-full flex flex-col items-center justify-center bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900 relative overflow-x-hidden pt-20">
         {/* Confetti effect */}
-        {confetti && <div className="confetti-container absolute inset-0 overflow-hidden">{renderConfetti()}</div>}
+        <FloatingSymbols />
+      
+      {/* Fixed background card table texture */}
+      <div className="absolute inset-0 bg-green-900 opacity-10 pointer-events-none" 
+           style={{backgroundImage: 'url("/poker-felt-texture.jpg")', backgroundSize: 'cover'}}></div>
+      
+      {/* Top glow */}
+      <div className="absolute -top-20 left-1/2 transform -translate-x-1/2 w-3/4 h-64 rounded-full bg-blue-500 opacity-20 blur-3xl"></div>
         
+        {confetti && <div className="confetti-container absolute inset-0 overflow-hidden">{renderConfetti()}</div>}
+
         {/* Game stage indicator */}
         <GameStageIndicator stage={gameStage} />
 
@@ -887,14 +1004,14 @@ const PokerGame = ({
         >
           {/* Table inner shadow */}
           <div className="absolute inset-0 rounded-full bg-gradient-to-br from-transparent via-transparent to-black opacity-30"></div>
-          
+
           {/* Table logo */}
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
             <div className="text-white text-5xl font-bold">POKER</div>
           </div>
 
           {/* Pot with chip animation */}
-          <motion.div 
+          <motion.div
             initial={{ scale: 0.8, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ duration: 0.5, type: "spring" }}
@@ -916,12 +1033,12 @@ const PokerGame = ({
           {/* Community Cards */}
           <div className="absolute left-1/2 top-[45%] transform -translate-x-1/2 flex space-x-1 md:space-x-3 z-10">
             {communityCards.map((card, i) => (
-              <Card 
-                key={i} 
-                card={card} 
-                index={i} 
-                delay={i} 
-                type="community" 
+              <Card
+                key={i}
+                card={card}
+                index={i}
+                delay={i}
+                type="community"
               />
             ))}
           </div>
@@ -929,19 +1046,19 @@ const PokerGame = ({
           {/* Player Hand */}
           <div className="absolute left-1/2 bottom-12 md:bottom-16 transform -translate-x-1/2 flex space-x-2 md:space-x-4 z-20">
             {playerHand.map((card, i) => (
-              <Card 
-                key={i} 
-                card={card} 
-                index={i} 
-                delay={i} 
-                type="player" 
+              <Card
+                key={i}
+                card={card}
+                index={i}
+                delay={i}
+                type="player"
               />
             ))}
           </div>
 
           {/* Hand evaluation display */}
           {playerHand.length === 2 && (
-            <motion.div 
+            <motion.div
               initial={{ y: 20, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               transition={{ delay: 0.5, duration: 0.4 }}
@@ -971,11 +1088,11 @@ const PokerGame = ({
         <div className="fixed top-20 right-5 z-50 w-64">
           <AnimatePresence>
             {toasts.map(toast => (
-              <Toast 
-                key={toast.id} 
-                message={toast.message} 
-                type={toast.type} 
-                onClose={() => dismissToast(toast.id)} 
+              <Toast
+                key={toast.id}
+                message={toast.message}
+                type={toast.type}
+                onClose={() => dismissToast(toast.id)}
               />
             ))}
           </AnimatePresence>
@@ -993,11 +1110,11 @@ const PokerGame = ({
             >
               <motion.div
                 initial={{ rotate: -10 }}
-                animate={{ 
+                animate={{
                   rotate: [0, 5, -5, 3, -3, 0],
                   scale: [1, 1.05, 1, 1.05, 1]
                 }}
-                transition={{ 
+                transition={{
                   duration: 1.5,
                   times: [0, 0.2, 0.4, 0.6, 0.8, 1],
                   repeat: Infinity
@@ -1020,7 +1137,7 @@ const PokerGame = ({
 
         {/* Action Buttons */}
         {gameStarted && (
-          <motion.div 
+          <motion.div
             initial={{ y: 50, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: 0.3, duration: 0.5 }}
@@ -1033,63 +1150,63 @@ const PokerGame = ({
             `}>
               {isMyTurn ? "Your Turn!" : "Waiting for opponent..."}
             </div>
-            
+
             {/* Responsive action buttons for mobile and desktop */}
             <div className="flex flex-col md:flex-row w-full space-y-2 md:space-y-0 md:space-x-4 mb-2">
-              <div className="flex flex-row space-x-2 md:space-x-0 md:flex-col md:space-y-2 md:w-1/3">
-                <input
-                  type="number"
-                  value={betInput}
-                  onChange={(e) => {
-                    setBetInput(e.target.value);
-                    setInputError('');
-                  }}
-                  className={`p-2 md:p-3 rounded-lg text-black w-full border-2 ${inputError ? 'border-red-500' : 'border-gray-300'} focus:border-blue-500 focus:outline-none transition-all`}
-                  placeholder="Amount"
-                  disabled={!isMyTurn}
-                  aria-label="Bet amount"
-                />
-                
-                {/* Quick bet options dropdown */}
-                <div className="relative w-full">
-                  <button
-                    onClick={() => setShowBetOptions(!showBetOptions)}
-                    disabled={!isMyTurn}
-                    className={`
-                      w-full bg-gray-700 text-white p-2 md:p-3 rounded-lg flex items-center justify-between
-                      ${!isMyTurn ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-600'}
-                    `}
-                    aria-label="Quick bet options"
-                  >
-                    <span>Quick Bets</span>
-                    <FontAwesomeIcon icon={showBetOptions ? faChevronUp : faChevronDown} />
-                  </button>
-                  
-                  {showBetOptions && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                      className="absolute bottom-full mb-1 left-0 right-0 bg-gray-800 rounded-lg shadow-lg z-50 overflow-hidden"
-                    >
-                      {betOptions.map((amount, i) => (
-                        <button
-                          key={i}
-                          onClick={() => {
-                            setBetInput(amount.toString());
-                            setShowBetOptions(false);
-                            playSoundEffect('buttonClick');
-                          }}
-                          className="w-full text-left px-4 py-2 text-white hover:bg-gray-700 transition-colors"
-                        >
-                          {i === betOptions.length - 1 ? 'All-in' : `$${amount}`}
-                        </button>
-                      ))}
-                    </motion.div>
-                  )}
-                </div>
-              </div>
-              
+  <div className="flex flex-row space-x-2 md:space-x-0 md:flex-col md:space-y-2 md:w-1/3">
+    <input
+      type="number"
+      value={betInput}
+      onChange={(e) => {
+        setBetInput(e.target.value);
+        setInputError('');
+      }}
+      className={`p-2 md:p-2 rounded-lg text-black w-full border-2 ${inputError ? 'border-red-500' : 'border-gray-300'} focus:border-blue-500 focus:outline-none transition-all`}
+      placeholder="Amount"
+      disabled={!isMyTurn}
+      aria-label="Bet amount"
+    />
+
+    {/* Quick bet options dropdown */}
+    <div className="relative w-full">
+      <button
+        onClick={() => setShowBetOptions(!showBetOptions)}
+        disabled={!isMyTurn}
+        className={`
+          w-full bg-gray-700 text-white p-2 md:p-2 text-base md:text-sm rounded-lg flex items-center justify-between
+          ${!isMyTurn ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-600'}
+        `}
+        aria-label="Quick bet options"
+      >
+        <span>Quick Bets</span>
+        <FontAwesomeIcon icon={showBetOptions ? faChevronUp : faChevronDown} className="text-sm" />
+      </button>
+
+      {showBetOptions && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -10 }}
+          className="absolute bottom-full mb-1 left-0 right-0 bg-gray-800 rounded-lg shadow-lg z-50 overflow-hidden"
+        >
+          {betOptions.map((amount, i) => (
+            <button
+              key={i}
+              onClick={() => {
+                setBetInput(amount.toString());
+                setShowBetOptions(false);
+                playSoundEffect('buttonClick');
+              }}
+              className="w-full text-left px-4 py-1 md:py-1 text-base md:text-sm text-white hover:bg-gray-700 transition-colors"
+            >
+              {i === betOptions.length - 1 ? 'All-in' : `$${amount}`}
+            </button>
+          ))}
+        </motion.div>
+      )}
+    </div>
+  </div>
+
               <div className="flex justify-between md:justify-end space-x-2 md:space-x-4 md:w-2/3">
                 <motion.button
                   whileHover={{ scale: isMyTurn ? 1.05 : 1 }}
@@ -1105,7 +1222,7 @@ const PokerGame = ({
                 >
                   Bet
                 </motion.button>
-                
+
                 <motion.button
                   whileHover={{ scale: isMyTurn ? 1.05 : 1 }}
                   whileTap={{ scale: isMyTurn ? 0.95 : 1 }}
@@ -1123,7 +1240,7 @@ const PokerGame = ({
                 >
                   Call
                 </motion.button>
-                
+
                 <motion.button
                   whileHover={{ scale: isMyTurn ? 1.05 : 1 }}
                   whileTap={{ scale: isMyTurn ? 0.95 : 1 }}
@@ -1143,45 +1260,45 @@ const PokerGame = ({
                 </motion.button>
               </div>
             </div>
-            
+
             {/* Error message */}
             {inputError && (
               <div className="text-red-500 text-sm mt-1 mb-2">
                 {inputError}
               </div>
             )}
-            
+
             {/* Keyboard shortcuts help */}
           </motion.div>
         )}
-        
+
         {/* Settings Modal */}
         <AnimatePresence>
           {showSettingsModal && (
-            <SettingsModal 
-              show={showSettingsModal} 
-              onClose={() => setShowSettingsModal(false)} 
-              audioEnabled={audioEnabled} 
+            <SettingsModal
+              show={showSettingsModal}
+              onClose={() => setShowSettingsModal(false)}
+              audioEnabled={audioEnabled}
               onToggleAudio={handleToggleAudio}
               contrastMode={contrastMode}
               onToggleContrast={() => setContrastMode(!contrastMode)}
             />
           )}
         </AnimatePresence>
-        
+
         {/* Help Modal */}
         <AnimatePresence>
           {showHelpModal && (
-            <HelpModal 
-              show={showHelpModal} 
-              onClose={() => setShowHelpModal(false)} 
+            <HelpModal
+              show={showHelpModal}
+              onClose={() => setShowHelpModal(false)}
             />
           )}
         </AnimatePresence>
-        
+
         {/* Footer with settings button */}
         <div className="fixed bottom-4 right-4 z-40">
-          <button 
+          <button
             className="bg-gray-800 hover:bg-gray-700 text-white p-3 rounded-full shadow-lg transition-all hover:scale-110"
             onClick={() => setShowSettingsModal(true)}
             aria-label="Open settings"
@@ -1190,7 +1307,7 @@ const PokerGame = ({
           </button>
         </div>
       </div>
-      
+
       {/* CSS for animations */}
       <style jsx>{`
         @keyframes fall {
