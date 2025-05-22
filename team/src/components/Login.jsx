@@ -100,12 +100,6 @@ const Login = () => {
             <h2 className="text-3xl md:text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-600 drop-shadow-lg tracking-tight">
               Welcome Back
             </h2>
-            <p className="text-gray-300 mt-2">
-              Don't have an account yet?{" "}
-              <Link to="/register" className="text-blue-400 hover:text-blue-300 transition">
-                Sign up
-              </Link>
-            </p>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-6">
@@ -137,12 +131,6 @@ const Login = () => {
               />
             </div>
 
-            <div className="text-right">
-              <Link to="/forgot-password" className="text-sm text-blue-400 hover:text-blue-300 transition">
-                Forgot password?
-              </Link>
-            </div>
-
             <button
               type="submit"
               disabled={loading}
@@ -152,13 +140,6 @@ const Login = () => {
             >
               {loading ? "Signing In..." : "Sign In"}
             </button>
-
-            <div className="flex items-center justify-center mt-4">
-              <Link to="/login" className="text-gray-400 hover:text-white transition text-sm flex items-center">
-                <FontAwesomeIcon icon={faArrowLeft} className="mr-2" />
-                Return to Home
-              </Link>
-            </div>
           </form>
         </motion.div>
       </div>
