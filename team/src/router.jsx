@@ -1,6 +1,5 @@
 // src/router.jsx
 import { createBrowserRouter, Navigate } from "react-router-dom";
-import App from "./App";
 import TeamPanel from "./components/TeamPanel";
 import Login from "./components/Login";
 import { UserAuth } from "./context/AuthContext";
