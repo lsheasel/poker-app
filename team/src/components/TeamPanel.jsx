@@ -1,0 +1,276 @@
+import React, { useState } from 'react';
+import { Routes, Route, Link, useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faBars, faTimes } from '@fortawesome/free-solid-svg-icons';
+import { 
+  faHome, 
+  faUsers, 
+  faFolderOpen, 
+  faCog, 
+  faGamepad, 
+  faTrophy 
+} from '@fortawesome/free-solid-svg-icons';
+import { UserAuth } from '../context/AuthContext';
+import Settings from './Settings';
+
+const Dashboard = () => (
+  <motion.div
+    initial={{ opacity: 0, x: 20 }}
+    animate={{ opacity: 1, x: 0 }}
+    transition={{ duration: 0.5 }}
+    className="p-6"
+  >
+    <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-600 mb-6">
+      Welcome Back!
+    </h2>
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {/* Statistik-Karten */}
+      <div className="bg-gray-800/50 backdrop-blur-lg p-6 rounded-xl border border-gray-700/50 shadow-lg hover:shadow-blue-500/20 transition-all">
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-blue-500/20 rounded-lg">
+            <FontAwesomeIcon icon={faUsers} className="w-6 h-6 text-blue-400" />
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold text-gray-200">Active Players</h3>
+            <p className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-600">
+              42
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-gray-800/50 backdrop-blur-lg p-6 rounded-xl border border-gray-700/50 shadow-lg hover:shadow-purple-500/20 transition-all">
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-purple-500/20 rounded-lg">
+            <FontAwesomeIcon icon={faGamepad} className="w-6 h-6 text-purple-400" />
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold text-gray-200">Active Games</h3>
+            <p className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600">
+              7
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-gray-800/50 backdrop-blur-lg p-6 rounded-xl border border-gray-700/50 shadow-lg hover:shadow-green-500/20 transition-all">
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-green-500/20 rounded-lg">
+            <FontAwesomeIcon icon={faTrophy} className="w-6 h-6 text-green-400" />
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold text-gray-200">Tournaments</h3>
+            <p className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-emerald-600">
+              2
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {/* Aktivitäts-Chart */}
+    <div className="mt-8 bg-gray-800/50 backdrop-blur-lg p-6 rounded-xl border border-gray-700/50">
+      <h3 className="text-xl font-semibold text-gray-200 mb-4">Weekly Activity</h3>
+      <div className="h-64 w-full bg-gray-900/50 rounded-lg">
+        {/* Hier könntest du ein Chart-Plugin wie recharts oder chart.js einbinden */}
+      </div>
+    </div>
+  </motion.div>
+);
+
+const Team = () => (
+  <motion.div
+    initial={{ opacity: 0, x: 20 }}
+    animate={{ opacity: 1, x: 0 }}
+    transition={{ duration: 0.5 }}
+    className="p-6"
+  >
+    <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-600 mb-4">Team</h2>
+    <p className="text-gray-300">Here you can manage your team.</p>
+  </motion.div>
+);
+
+const Projects = () => (
+  <motion.div
+    initial={{ opacity: 0, x: 20 }}
+    animate={{ opacity: 1, x: 0 }}
+    transition={{ duration: 0.5 }}
+    className="p-6"
+  >
+    <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-600 mb-4">Projects</h2>
+    <p className="text-gray-300">Manage your projects here.</p>
+  </motion.div>
+);
+
+const TeamPanel = () => {
+  const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth >= 1024);
+  const { signOut, session } = UserAuth();
+  const navigate = useNavigate();
+
+  React.useEffect(() => {
+    const handleResize = () => {
+      setIsSidebarOpen(window.innerWidth >= 1024);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
+
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      navigate('/login');
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const navItems = [
+    { name: 'Dashboard', path: '/panel/dashboard', icon: faHome },
+    { name: 'Team', path: '/panel/team', icon: faUsers },
+    { name: 'Projects', path: '/panel/projects', icon: faFolderOpen },
+    { name: 'Settings', path: '/panel/settings', icon: faCog },
+  ];
+
+  const suitSymbols = ["♠", "♥", "♦", "♣"];
+
+  const FloatingSymbols = () => {
+    return (
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        {Array(20).fill().map((_, index) => {
+          const randomSymbol = suitSymbols[Math.floor(Math.random() * suitSymbols.length)];
+          const size = Math.random() * 40 + 20;
+          const xPos = Math.random() * 100;
+          const yPos = Math.random() * 100;
+          const duration = Math.random() * 20 + 10;
+          const delay = Math.random() * 5;
+          const opacity = Math.random() * 0.15 + 0.05;
+          return (
+            <motion.div
+              key={index}
+              className="absolute text-white select-none"
+              initial={{ x: `${xPos}vw`, y: `${yPos}vh`, opacity: 0, scale: 0.5 }}
+              animate={{ y: [`${yPos}vh`, `${yPos - 30}vh`], rotate: [0, 360], opacity: [0, opacity, opacity, 0], scale: [0.5, 1, 1, 0.5] }}
+              transition={{ repeat: Infinity, duration: duration, delay: delay, ease: "easeInOut", times: [0, 0.2, 0.8, 1] }}
+              style={{ fontSize: `${size}px` }}
+            >
+              {randomSymbol}
+            </motion.div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  return (
+    <div className="min-h-screen w-full bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900 relative overflow-x-hidden">
+      <FloatingSymbols />
+      {/* Fixed background card table texture */}
+      <div
+        className="absolute inset-0 bg-green-900 opacity-10 pointer-events-none"
+        style={{ backgroundImage: 'url("/poker-felt-texture.jpg")', backgroundSize: 'cover' }}
+      ></div>
+      {/* Top glow */}
+      <div className="absolute -top-20 left-1/2 transform -translate-x-1/2 w-3/4 h-64 rounded-full bg-blue-500 opacity-20 blur-3xl"></div>
+
+      {/* Main Content */}
+      <div className="flex w-full h-screen">
+        {/* Sidebar */}
+        <AnimatePresence>
+          {isSidebarOpen && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.5 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black z-20 lg:hidden"
+              onClick={() => setIsSidebarOpen(false)}
+            />
+          )}
+        </AnimatePresence>
+        <motion.div
+          initial={{ x: 0 }}
+          animate={{ x: isSidebarOpen ? 0 : -256 }}
+          className={`fixed lg:relative top-0 left-0 h-screen w-64 bg-gray-800 bg-opacity-80 backdrop-blur-lg text-white z-30 
+            ${!isSidebarOpen ? 'lg:translate-x-0 -translate-x-full lg:-translate-x-0' : ''} 
+            transition-transform duration-300 ease-in-out lg:flex flex-col shadow-lg border-r border-gray-700`}
+        >
+          <div className="p-6 flex items-center justify-between border-b border-gray-700">
+            <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-600">Team Panel</h2>
+            <button onClick={toggleSidebar} className="lg:hidden">
+              <FontAwesomeIcon icon={isSidebarOpen ? faTimes : faBars} className="w-6 h-6" />
+            </button>
+          </div>
+          <nav className="flex-1 mt-4">
+            {navItems.map((item) => (
+              <Link
+                key={item.name}
+                to={item.path}
+                className="flex items-center gap-3 py-3 px-6 hover:bg-gray-700/50 transition-all text-gray-300 hover:text-white group"
+                onClick={() => {
+                  // Nur auf Mobile die Sidebar schließen
+                  if (window.innerWidth < 1024) {
+                    setIsSidebarOpen(false);
+                  }
+                }}
+              >
+                <div className="w-5">
+                  <FontAwesomeIcon 
+                    icon={item.icon} 
+                    className="group-hover:scale-110 transition-transform" 
+                  />
+                </div>
+                <span>{item.name}</span>
+              </Link>
+            ))}
+          </nav>
+          <div className="p-6 border-t border-gray-700">
+            <p className="text-sm mb-2 text-gray-300">Logged in as: {session?.user?.email}</p>
+            <button
+              onClick={handleLogout}
+              className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-400 hover:to-purple-500 text-white py-2 rounded-lg hover:shadow-lg transition-colors"
+            >
+              Log out
+            </button>
+          </div>
+        </motion.div>
+
+        {/* Hauptbereich */}
+        <div className="flex-1 flex flex-col ml-0 lg:ml-0"> {/* Removed lg:ml-64 */}
+          {/* Navbar für mobile Geräte */}
+          <div className="lg:hidden fixed top-0 left-0 w-full bg-gray-800 bg-opacity-80 backdrop-blur-lg text-white p-4 flex justify-between items-center z-20 shadow">
+            <h1 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-600">Team Panel</h1>
+            <button onClick={toggleSidebar}>
+              <FontAwesomeIcon icon={faBars} className="w-6 h-6" />
+            </button>
+          </div>
+
+          {/* Inhalt - Angepasstes Layout */}
+          <div className="flex-1 p-4 mt-16 lg:mt-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.5 }}
+              className="h-full bg-gray-800 bg-opacity-80 backdrop-blur-lg rounded-2xl shadow-2xl p-8 border border-gray-700"
+            >
+              <Routes>
+                <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/team" element={<Team />} />
+                <Route path="/projects" element={<Projects />} />
+                <Route path="/settings" element={<Settings />} />
+              </Routes>
+            </motion.div>
+          </div>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="mt-8 text-gray-400 text-sm opacity-80 text-center">
+        © 2025 Poker4Fun – Play responsibly. No real money involved.
+      </div>
+    </div>
+  );
+};
+
+export default TeamPanel;
