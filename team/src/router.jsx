@@ -5,7 +5,6 @@ import Login from "./components/Login";
 import { UserAuth } from "./context/AuthContext";
 import React from "react";
 
-// Wrapper für geschützte Routen
 const ProtectedRoute = ({ children }) => {
   const { session, loading } = UserAuth();
   if (loading) return <div>Loading...</div>;
@@ -15,6 +14,10 @@ const ProtectedRoute = ({ children }) => {
 
 export const router = createBrowserRouter(
   [
+    {
+      path: "/",
+      element: <Navigate to="/panel/dashboard" />,
+    },
     {
       path: "/login",
       element: <Login />,
@@ -28,17 +31,9 @@ export const router = createBrowserRouter(
       ),
     },
     {
-      path: "/",
-      element: <Navigate to="/panel/dashboard" />,
-    },
-    {
       path: "*",
       element: <Navigate to="/login" />,
     },
   ],
-  {
-    future: {
-      v7_startTransition: true,
-    },
-  }
+  { basename: '/' }
 );
