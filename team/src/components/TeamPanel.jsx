@@ -204,19 +204,8 @@ const Projects = () => (
 );
 
 const TeamPanel = () => {
-  const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth >= 1024);
   const { signOut, session } = UserAuth();
   const navigate = useNavigate();
-
-  React.useEffect(() => {
-    const handleResize = () => {
-      setIsSidebarOpen(window.innerWidth >= 1024);
-    };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
 
   const handleLogout = async () => {
     try {
@@ -277,31 +266,13 @@ const TeamPanel = () => {
       <div className="absolute -top-20 left-1/2 transform -translate-x-1/2 w-3/4 h-64 rounded-full bg-blue-500 opacity-20 blur-3xl"></div>
 
       {/* Main Content */}
-      <div className="flex w-full h-screen">
-        {/* Sidebar */}
-        <AnimatePresence>
-          {isSidebarOpen && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 0.5 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black z-20 lg:hidden"
-              onClick={() => setIsSidebarOpen(false)}
-            />
-          )}
-        </AnimatePresence>
-        <motion.div
-          initial={{ x: 0 }}
-          animate={{ x: isSidebarOpen ? 0 : -256 }}
-          className={`fixed lg:relative top-0 left-0 h-screen w-64 bg-gray-800 bg-opacity-80 backdrop-blur-lg text-white z-30 
-            ${!isSidebarOpen ? 'lg:translate-x-0 -translate-x-full lg:-translate-x-0' : ''} 
-            transition-transform duration-300 ease-in-out lg:flex flex-col shadow-lg border-r border-gray-700`}
-        >
+      <div className="flex w-full">
+        {/* Fixed Sidebar */}
+        <div className="fixed top-0 left-0 w-64 h-screen bg-gray-800 bg-opacity-80 backdrop-blur-lg text-white shadow-lg border-r border-gray-700">
           <div className="p-6 flex items-center justify-between border-b border-gray-700">
-            <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-600">Team Panel</h2>
-            <button onClick={toggleSidebar} className="lg:hidden">
-              <FontAwesomeIcon icon={isSidebarOpen ? faTimes : faBars} className="w-6 h-6" />
-            </button>
+            <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-600">
+              Team Panel
+            </h2>
           </div>
           <nav className="flex-1 mt-4">
             {navItems.map((item) => (
@@ -309,12 +280,6 @@ const TeamPanel = () => {
                 key={item.name}
                 to={item.path}
                 className="flex items-center gap-3 py-3 px-6 hover:bg-gray-700/50 transition-all text-gray-300 hover:text-white group"
-                onClick={() => {
-                  // Nur auf Mobile die Sidebar schließen
-                  if (window.innerWidth < 1024) {
-                    setIsSidebarOpen(false);
-                  }
-                }}
               >
                 <div className="w-5">
                   <FontAwesomeIcon 
@@ -335,20 +300,11 @@ const TeamPanel = () => {
               Log out
             </button>
           </div>
-        </motion.div>
+        </div>
 
-        {/* Hauptbereich */}
-        <div className="flex-1 flex flex-col ml-0 lg:ml-0"> {/* Removed lg:ml-64 */}
-          {/* Navbar für mobile Geräte */}
-          <div className="lg:hidden fixed top-0 left-0 w-full bg-gray-800 bg-opacity-80 backdrop-blur-lg text-white p-4 flex justify-between items-center z-20 shadow">
-            <h1 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-600">Team Panel</h1>
-            <button onClick={toggleSidebar}>
-              <FontAwesomeIcon icon={faBars} className="w-6 h-6" />
-            </button>
-          </div>
-
-          {/* Inhalt - Angepasstes Layout */}
-          <div className="flex-1 p-4 mt-16 lg:mt-4">
+        {/* Main Content Area with left margin to account for fixed sidebar */}
+        <div className="flex-1 ml-64">
+          <div className="flex-1 p-4">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -358,18 +314,13 @@ const TeamPanel = () => {
               <Routes>
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/team" element={<Team />} />
-                <Route path="/players" element={<Players />} /> {/* Neue Zeile */}
+                <Route path="/players" element={<Players />} />
                 <Route path="/projects" element={<Projects />} />
                 <Route path="/settings" element={<Settings />} />
               </Routes>
             </motion.div>
           </div>
         </div>
-      </div>
-
-      {/* Footer */}
-      <div className="mt-8 text-gray-400 text-sm opacity-80 text-center">
-        © 2025 Poker4Fun – Play responsibly. No real money involved.
       </div>
     </div>
   );
