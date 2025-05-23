@@ -19,7 +19,6 @@ export const playersSupabase = createClient(playersSupabaseUrl, playersSupabaseA
 // Function to get authenticated users with metadata
 export const fetchAuthUsers = async () => {
   try {
-    // Get auth session from main project
     const { data: { session }, error: sessionError } = await supabase.auth.getSession();
     if (sessionError) throw sessionError;
 
@@ -27,9 +26,6 @@ export const fetchAuthUsers = async () => {
       console.log('No active session - User not logged in');
       return [];
     }
-
-    console.log('Current user ID:', session.user.id);
-    console.log('Current user email:', session.user.email);
 
     // Set the auth header for the players client
     playersSupabase.auth.setSession({
@@ -47,27 +43,49 @@ export const fetchAuthUsers = async () => {
       throw error;
     }
 
-    console.log('Raw profiles data:', data);
-
     if (!data || data.length === 0) {
-      console.log('No profiles found - Database query returned empty');
+      console.log('No profiles found');
       return [];
     }
 
-    // Return complete profile data including raw_user_meta_data
+    // Map the data including avatar_url from metadata
     const users = data.map(profile => ({
       id: profile.id,
       email: profile.email,
-      username: profile.raw_user_meta_data?.first_name || profile.email?.split('@')[0],
+      username: profile.raw_user_meta_data?.username || profile.email?.split('@')[0],
+      avatar_url: profile.raw_user_meta_data?.avatar_url, // Get avatar_url from metadata
       created_at: profile.created_at,
-      raw_user_meta_data: profile.raw_user_meta_data || {}  // Include all metadata
+      raw_user_meta_data: profile.raw_user_meta_data || {}
     }));
 
-    console.log('Final transformed users:', users);
     return users;
-
   } catch (error) {
     console.error('Detailed error in fetchAuthUsers:', error);
     throw error;
+  }
+};
+
+// Function to check if user is admin
+export const checkIsAdmin = async () => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return false;
+
+    // Check team_members table for admin role
+    const { data, error } = await supabase
+      .from('team_members')
+      .select('role')
+      .eq('id', session.user.id)
+      .maybeSingle();
+
+    if (error) {
+      console.error('Error checking admin status:', error);
+      return false;
+    }
+
+    return data?.role === 'Admin';
+  } catch (error) {
+    console.error('Error in checkIsAdmin:', error);
+    return false;
   }
 };

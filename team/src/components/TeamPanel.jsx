@@ -14,72 +14,138 @@ import {
 import { UserAuth } from '../context/AuthContext';
 import Settings from './Settings';
 import Players from './Players';
-import { supabase } from '../supabaseClient';
+import { supabase, playersSupabase, checkIsAdmin } from '../supabaseClient';
+import MetaDataDialog from './MetaDataDialog';
 
-const Dashboard = () => (
-  <motion.div
-    initial={{ opacity: 0, x: 20 }}
-    animate={{ opacity: 1, x: 0 }}
-    transition={{ duration: 0.5 }}
-    className="p-6"
-  >
-    <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-600 mb-6">
-      Welcome Back!
-    </h2>
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {/* Statistik-Karten */}
-      <div className="bg-gray-800/50 backdrop-blur-lg p-6 rounded-xl border border-gray-700/50 shadow-lg hover:shadow-blue-500/20 transition-all">
-        <div className="flex items-center gap-4">
-          <div className="p-3 bg-blue-500/20 rounded-lg">
-            <FontAwesomeIcon icon={faUsers} className="w-6 h-6 text-blue-400" />
+const Dashboard = () => {
+  const [stats, setStats] = useState({
+    activePlayers: 0,
+    activeGames: 0,
+    tournaments: 0,
+    totalCoins: 0,
+    averageLevel: 0,
+    topPlayer: null
+  });
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        // Get all profiles
+        const { data: profiles } = await playersSupabase
+          .from('profiles')
+          .select('*');
+
+        if (profiles) {
+          // Calculate statistics
+          const totalCoins = profiles.reduce((sum, player) => 
+            sum + (player.raw_user_meta_data?.coins || 0), 0);
+          
+          const levels = profiles.map(p => p.raw_user_meta_data?.level || 0);
+          const averageLevel = Math.round(
+            levels.reduce((a, b) => a + b, 0) / profiles.length
+          );
+
+          // Find top player by XP
+          const topPlayer = profiles.reduce((top, player) => 
+            (player.raw_user_meta_data?.xp || 0) > (top?.raw_user_meta_data?.xp || 0) 
+              ? player 
+              : top
+          );
+
+          setStats({
+            activePlayers: profiles.length,
+            activeGames: Math.floor(profiles.length / 4),
+            tournaments: 2,
+            totalCoins,
+            averageLevel,
+            topPlayer
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching stats:', error);
+      }
+    };
+
+    fetchStats();
+  }, []);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.5 }}
+      className="p-6"
+    >
+      <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-600 mb-6">
+        Welcome Back!
+      </h2>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="bg-gray-800/50 backdrop-blur-lg p-6 rounded-xl border border-gray-700/50 shadow-lg hover:shadow-blue-500/20 transition-all">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-blue-500/20 rounded-lg">
+              <FontAwesomeIcon icon={faUsers} className="w-6 h-6 text-blue-400" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-gray-200">Registered Players</h3>
+              <p className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-600">
+                {stats.activePlayers}
+              </p>
+            </div>
           </div>
-          <div>
-            <h3 className="text-lg font-semibold text-gray-200">Active Players</h3>
-            <p className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-600">
-              42
-            </p>
+        </div>
+
+        <div className="bg-gray-800/50 backdrop-blur-lg p-6 rounded-xl border border-gray-700/50 shadow-lg hover:shadow-purple-500/20 transition-all">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-purple-500/20 rounded-lg">
+              <FontAwesomeIcon icon={faGamepad} className="w-6 h-6 text-purple-400" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-gray-200">Average Level</h3>
+              <p className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600">
+                {stats.averageLevel}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-gray-800/50 backdrop-blur-lg p-6 rounded-xl border border-gray-700/50 shadow-lg hover:shadow-green-500/20 transition-all">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-green-500/20 rounded-lg">
+              <FontAwesomeIcon icon={faTrophy} className="w-6 h-6 text-green-400" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-gray-200">Total Coins</h3>
+              <p className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-emerald-600">
+                {stats.totalCoins.toLocaleString()}
+              </p>
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="bg-gray-800/50 backdrop-blur-lg p-6 rounded-xl border border-gray-700/50 shadow-lg hover:shadow-purple-500/20 transition-all">
-        <div className="flex items-center gap-4">
-          <div className="p-3 bg-purple-500/20 rounded-lg">
-            <FontAwesomeIcon icon={faGamepad} className="w-6 h-6 text-purple-400" />
-          </div>
-          <div>
-            <h3 className="text-lg font-semibold text-gray-200">Active Games</h3>
-            <p className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600">
-              7
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-gray-800/50 backdrop-blur-lg p-6 rounded-xl border border-gray-700/50 shadow-lg hover:shadow-green-500/20 transition-all">
-        <div className="flex items-center gap-4">
-          <div className="p-3 bg-green-500/20 rounded-lg">
-            <FontAwesomeIcon icon={faTrophy} className="w-6 h-6 text-green-400" />
-          </div>
-          <div>
-            <h3 className="text-lg font-semibold text-gray-200">Tournaments</h3>
-            <p className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-emerald-600">
-              2
-            </p>
+      {/* Top Player Card */}
+      {stats.topPlayer && (
+        <div className="mt-8 bg-gray-800/50 backdrop-blur-lg p-6 rounded-xl border border-gray-700/50">
+          <h3 className="text-xl font-semibold text-gray-200 mb-4">Top Player</h3>
+          <div className="flex items-center gap-4">
+            <div className="w-16 h-16 bg-gradient-to-br from-yellow-400 to-yellow-600 rounded-full flex items-center justify-center">
+              <span className="text-2xl font-bold text-white">
+                {stats.topPlayer.raw_user_meta_data?.first_name?.[0] || stats.topPlayer.email?.[0]}
+              </span>
+            </div>
+            <div>
+              <h4 className="text-lg font-semibold text-gray-200">
+                {stats.topPlayer.raw_user_meta_data?.first_name || stats.topPlayer.email.split('@')[0]}
+              </h4>
+              <p className="text-sm text-gray-400">Level {stats.topPlayer.raw_user_meta_data?.level || 0}</p>
+              <p className="text-sm text-gray-400">XP: {stats.topPlayer.raw_user_meta_data?.xp?.toLocaleString() || 0}</p>
+            </div>
           </div>
         </div>
-      </div>
-    </div>
-
-    {/* Aktivitäts-Chart */}
-    <div className="mt-8 bg-gray-800/50 backdrop-blur-lg p-6 rounded-xl border border-gray-700/50">
-      <h3 className="text-xl font-semibold text-gray-200 mb-4">Weekly Activity</h3>
-      <div className="h-64 w-full bg-gray-900/50 rounded-lg">
-        {/* Hier könntest du ein Chart-Plugin wie recharts oder chart.js einbinden */}
-      </div>
-    </div>
-  </motion.div>
-);
+      )}
+    </motion.div>
+  );
+};
 
 const Team = () => {
   const [users, setUsers] = useState([]);
@@ -125,7 +191,6 @@ const Team = () => {
 
       setUsers(data || []);
     } catch (error) {
-      console.error('Error fetching team members:', error);
     } finally {
       setLoading(false);
     }
@@ -191,21 +256,41 @@ const Team = () => {
   );
 };
 
-const Projects = () => (
-  <motion.div
-    initial={{ opacity: 0, x: 20 }}
-    animate={{ opacity: 1, x: 0 }}
-    transition={{ duration: 0.5 }}
-    className="p-6"
-  >
-    <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-600 mb-4">Projects</h2>
-    <p className="text-gray-300">Manage your projects here.</p>
-  </motion.div>
-);
-
 const TeamPanel = () => {
   const { signOut, session } = UserAuth();
   const navigate = useNavigate();
+  const [selectedPlayer, setSelectedPlayer] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    const checkAdmin = async () => {
+      try {
+        const adminStatus = await checkIsAdmin();
+        setIsAdmin(adminStatus);
+        
+        // Get current session
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
+
+        // Set session for players client in a more direct way
+        const { access_token, refresh_token } = session;
+        
+        await playersSupabase.auth.setSession({
+          access_token,
+          refresh_token,
+          expires_in: session.expires_in // Make sure to include expiry
+        });
+
+      } catch (error) {
+        console.error('Error checking admin status:', error);
+        setIsAdmin(false);
+      }
+    };
+    
+    if (session) {
+      checkAdmin();
+    }
+  }, [session]);
 
   const handleLogout = async () => {
     try {
@@ -219,8 +304,7 @@ const TeamPanel = () => {
   const navItems = [
     { name: 'Dashboard', path: '/panel/dashboard', icon: faHome },
     { name: 'Team', path: '/panel/team', icon: faUsers },
-    { name: 'Players', path: '/panel/players', icon: faGamepad }, // Neue Zeile
-    { name: 'Projects', path: '/panel/projects', icon: faFolderOpen },
+    { name: 'Players', path: '/panel/players', icon: faGamepad },
     { name: 'Settings', path: '/panel/settings', icon: faCog },
   ];
 
@@ -314,14 +398,27 @@ const TeamPanel = () => {
               <Routes>
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/team" element={<Team />} />
-                <Route path="/players" element={<Players />} />
-                <Route path="/projects" element={<Projects />} />
+                <Route 
+                  path="/players" 
+                  element={<Players onSelectPlayer={setSelectedPlayer} />} 
+                />
                 <Route path="/settings" element={<Settings />} />
               </Routes>
             </motion.div>
           </div>
         </div>
       </div>
+
+      {/* Player Profile Dialog */}
+      <AnimatePresence>
+        <MetaDataDialog
+          isOpen={selectedPlayer !== null}
+          onClose={() => setSelectedPlayer(null)}
+          playerData={selectedPlayer || {}}
+          isAdmin={isAdmin}
+          onSelectPlayer={setSelectedPlayer}
+        />
+      </AnimatePresence>
     </div>
   );
 };
