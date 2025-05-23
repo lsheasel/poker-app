@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Routes, Route, Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -13,6 +13,8 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import { UserAuth } from '../context/AuthContext';
 import Settings from './Settings';
+import Players from './Players';
+import { supabase } from '../supabaseClient';
 
 const Dashboard = () => (
   <motion.div
@@ -79,17 +81,115 @@ const Dashboard = () => (
   </motion.div>
 );
 
-const Team = () => (
-  <motion.div
-    initial={{ opacity: 0, x: 20 }}
-    animate={{ opacity: 1, x: 0 }}
-    transition={{ duration: 0.5 }}
-    className="p-6"
-  >
-    <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-600 mb-4">Team</h2>
-    <p className="text-gray-300">Here you can manage your team.</p>
-  </motion.div>
-);
+const Team = () => {
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchUsers();
+
+    // Set up real-time channel subscription
+    const channel = supabase
+      .channel('team_members_changes')
+      .on('postgres_changes', 
+        { 
+          event: '*', 
+          schema: 'public', 
+          table: 'team_members' 
+        }, 
+        (payload) => {
+          if (payload.eventType === 'UPDATE') {
+            setUsers(currentUsers => 
+              currentUsers.map(user => 
+                user.id === payload.new.id ? { ...user, ...payload.new } : user
+              )
+            );
+          }
+        }
+      )
+      .subscribe();
+
+    // Cleanup subscription
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const fetchUsers = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('team_members')
+        .select('*');
+
+      if (error) throw error;
+
+      setUsers(data || []);
+    } catch (error) {
+      console.error('Error fetching team members:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.5 }}
+      className="p-6"
+    >
+      <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-600 mb-6">
+        Team Members
+      </h2>
+
+      {loading ? (
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500"></div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {users.map((user) => (
+            <div
+              key={user.id}
+              className="bg-gray-800/50 backdrop-blur-lg p-6 rounded-xl border border-gray-700/50 
+                        shadow-lg hover:shadow-purple-500/20 transition-all"
+            >
+              <div className="flex items-center gap-4">
+                <div className="relative">
+                  {/* Avatar placeholder or user avatar if available */}
+                  <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                    <span className="text-lg font-bold text-white">
+                      {user.username?.[0]?.toUpperCase() || user.email?.[0]?.toUpperCase()}
+                    </span>
+                  </div>
+                  <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-2 border-gray-800 rounded-full"></div>
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-semibold text-gray-200">
+                    {user.username || 'Anonymous User'}
+                  </h3>
+                  <p className="text-sm text-gray-400">{user.email}</p>
+                </div>
+              </div>
+              <div className="mt-4 pt-4 border-t border-gray-700/50">
+                <div className="text-sm text-gray-400">
+                  <p>Role: {user.role || 'Member'}</p>
+                  <p>Joined: {new Date(user.created_at).toLocaleDateString()}</p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {users.length === 0 && !loading && (
+        <div className="text-center text-gray-400 py-12">
+          No team members found.
+        </div>
+      )}
+    </motion.div>
+  );
+};
 
 const Projects = () => (
   <motion.div
@@ -130,6 +230,7 @@ const TeamPanel = () => {
   const navItems = [
     { name: 'Dashboard', path: '/panel/dashboard', icon: faHome },
     { name: 'Team', path: '/panel/team', icon: faUsers },
+    { name: 'Players', path: '/panel/players', icon: faGamepad }, // Neue Zeile
     { name: 'Projects', path: '/panel/projects', icon: faFolderOpen },
     { name: 'Settings', path: '/panel/settings', icon: faCog },
   ];
@@ -257,6 +358,7 @@ const TeamPanel = () => {
               <Routes>
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/team" element={<Team />} />
+                <Route path="/players" element={<Players />} /> {/* Neue Zeile */}
                 <Route path="/projects" element={<Projects />} />
                 <Route path="/settings" element={<Settings />} />
               </Routes>
