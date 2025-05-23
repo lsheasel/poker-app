@@ -24,17 +24,37 @@ const Settings = () => {
     e.preventDefault();
     setLoading(true);
     try {
-      const { error } = await supabase.auth.updateUser({
+      // First update auth user metadata
+      const { error: authError } = await supabase.auth.updateUser({
         data: { username: formData.username }
       });
 
-      if (error) throw error;
+      if (authError) throw authError;
+
+      // Then update team_members table
+      const { error: teamError } = await supabase
+        .from('team_members')
+        .upsert({ 
+          id: session.user.id,
+          email: session.user.email,
+          username: formData.username
+        }, { 
+          onConflict: 'id',
+          ignoreDuplicates: false 
+        });
+
+      if (teamError) throw teamError;
 
       setMessage({
         text: 'Username updated successfully!',
         type: 'success'
       });
+
+      // Optional: Log success
+      console.log('Username updated in both auth and team_members');
+
     } catch (error) {
+      console.error('Update error:', error);
       setMessage({
         text: error.message,
         type: 'error'
