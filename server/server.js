@@ -34,7 +34,7 @@ let lobbies = {};
 io.on("connection", (socket) => {
   let currentLobby = null;
 
-  socket.on("createLobby", (lobbyName, playerName, avatar_url) => {
+  socket.on("createLobby", (lobbyName, playerName, avatar_url, card_skin) => {
     
     if (lobbies[lobbyName]) {
       socket.emit("error", "Lobby already exists");
@@ -44,7 +44,7 @@ io.on("connection", (socket) => {
     currentLobby = lobbyName;
     lobbies[lobbyName] = {
       host: socket.id,
-      players: [{ id: socket.id, name: playerName, chips: 1000, hand: [], avatar_url: avatar_url}], // Added hand array for each player
+      players: [{ id: socket.id, name: playerName, chips: 1000, hand: [], avatar_url: avatar_url, card_skin: card_skin}], // Added hand array for each player
       gameStarted: false,
       deck: [],
       communityCards: [],
@@ -63,14 +63,14 @@ io.on("connection", (socket) => {
     io.to(lobbyName).emit("updatePlayers", lobbies[lobbyName].players);
   });
 
-  socket.on("joinLobby", (lobbyName, playerName, avatar_url) => {
+  socket.on("joinLobby", (lobbyName, playerName, avatar_url, card_skin) => {
     
     if (!lobbies[lobbyName]) {
       socket.emit("error", "Lobby doesn't exist");
       return;
     }
 
-    lobbies[lobbyName].players.push({ id: socket.id, name: playerName, chips: 1000, hand: [], avatar_url: avatar_url}); // Added hand array for each player
+    lobbies[lobbyName].players.push({ id: socket.id, name: playerName, chips: 1000, hand: [], avatar_url: avatar_url, card_skin: card_skin}); // Added hand array for each player
     socket.join(lobbyName);
     io.to(lobbyName).emit("playerJoined", lobbies[lobbyName].players);
     io.to(lobbyName).emit("updatePlayers", lobbies[lobbyName].players);

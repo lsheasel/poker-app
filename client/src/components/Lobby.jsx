@@ -134,12 +134,19 @@ const Lobby = ({ onStartGame }) => {
   const [avatar_url, setAvatarUrl] = useState(null);
   const [isVisible, setIsVisible] = useState(true);
   const [avatar_urls, setAvatarUrls] = useState(null);
+  const [card_skin, setCardSkin] = useState("classic");
   
   const { session, signOut } = UserAuth();
   useEffect(() => {
   // Wenn der Benutzer eingeloggt ist, holen wir das Avatar-Bild aus der session
   if (session?.user?.user_metadata?.avatar_url) {
     setAvatarUrl(session.user.user_metadata.avatar_url);
+  }
+}, [session]);
+useEffect(() => {
+  // Wenn der Benutzer eingeloggt ist, holen wir das Avatar-Bild aus der session
+  if (session?.user?.user_metadata?.card_skin) {
+    setCardSkin(session.user.user_metadata.card_skin);
   }
 }, [session]);
 
@@ -220,6 +227,7 @@ useEffect(() => {
         lobbyName,
         playerName,
         avatar_url,
+        card_skin,
         playerId: socket.id,
         isHost,
       });
@@ -238,7 +246,7 @@ useEffect(() => {
       socket.off("gameStarted", handleGameStarted);
       socket.off("error", handleError);
     };
-  }, [lobbyName, onStartGame, isHost, playerName, avatar_url]);
+  }, [lobbyName, onStartGame, isHost, playerName, avatar_url, card_skin]);
 
   const createLobby = () => {
   if (!playerName.trim()) {
@@ -253,13 +261,13 @@ useEffect(() => {
 
   const code = generateLobbyCode();
   setLobbyName(code);
-  socket.emit("createLobby", code, playerName, avatar_url);
+  socket.emit("createLobby", code, playerName, avatar_url, card_skin);
 
   setIsLoading(true);
 
   socket.once("lobbyCreated", () => {
     setIsLoading(false);
-    setLobbyPlayers([{ id: socket.id, name: playerName, avatar_url: avatar_url }]);
+    setLobbyPlayers([{ id: socket.id, name: playerName, avatar_url: avatar_url, card_skin: card_skin }]);
     setInLobby(true);
     setIsHost(true);
     setPopup({ open: true, message: "Lobby created successfully!", type: "success" });
@@ -285,7 +293,7 @@ useEffect(() => {
   }
 
   setIsLoading(true);
-  socket.emit("joinLobby", lobbyName, playerName, avatar_url);
+  socket.emit("joinLobby", lobbyName, playerName, avatar_url, card_skin);
 };
 
 
@@ -491,6 +499,7 @@ useEffect(() => {
                       url={avatar_url} // Sollte hier die URL vom User-Avatar übergeben werden
                       size={32}
                       isEditable={false}
+                      ringSize={21}
                     />                    
                   </button>                                
                 </div>
@@ -553,6 +562,7 @@ useEffect(() => {
                                 url={avatar_url}
                                 size={88}
                                 isEditable={false}
+                                ringSize={25}
                               />
                             </div>
                           </motion.div>
